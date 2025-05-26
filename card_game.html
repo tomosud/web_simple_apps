@@ -285,14 +285,19 @@
                 throwVelocity.z * throwVelocity.z
             );
             
+            // カードの角度を計算（床との平行度）
+            // X軸とY軸の回転が小さいほど床と平行
+            const angleX = Math.abs(cardRotation.x);
+            const angleY = Math.abs(cardRotation.y);
+            const parallelness = Math.max(0, 1 - (angleX + angleY) / Math.PI); // 0-1の範囲
+            
             // プレイヤーカードを床で停止
             cardPosition.z = FLOOR_Z + 1;
             throwVelocity = { x: 0, y: 0, z: 0 };
             throwRotationVelocity = { x: 0, y: 0, z: 0 };
             
-            // 床のカードを飛ばす
-            scatterFloorCards(cardPosition.x, cardPosition.y, speed);
-            
+            // 床のカードを飛ばす（速度と平行度の両方を考慮）
+            scatterFloorCards(cardPosition.x, cardPosition.y, speed, parallelness);
             
             // カードをリセット
             setTimeout(() => {
@@ -300,9 +305,12 @@
             }, 2000);
         }
         
-        function scatterFloorCards(impactX, impactY, speed) {
-            // 加速度に応じた衝撃範囲（速度が速いほど広範囲）
-            const impactRange = Math.min(20 + speed * 2, 60);
+        function scatterFloorCards(impactX, impactY, speed, parallelness) {
+            // 加速度と平行度に応じた衝撃範囲
+            const baseRange = 20;
+            const speedBonus = speed * 2;
+            const parallelnessBonus = parallelness * 30; // 平行度によるボーナス
+            const impactRange = Math.min(baseRange + speedBonus + parallelnessBonus, 80);
             let newFlyingCards = 0;
             
             floorCards.forEach(card => {
