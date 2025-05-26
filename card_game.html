@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>メンコゲーム - 加速度センサー</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            transition: background-color 0.1s ease;
+        }
+        
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 100;
+            max-width: 200px;
+        }
+        
+        #gameCanvas {
+            display: block;
+        }
+        
+        #permissionDialog {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 1000;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div id="permissionDialog">
+        <h2>メンコゲーム</h2>
+        <p>加速度センサーを使用してメンコを投げます</p>
+        <button onclick="requestSensorPermission()">ゲーム開始</button>
+    </div>
+    
+    <div id="info">
+        <div>Z軸加速度: <span id="zAccel">0.00</span></div>
+        <div>カード距離: <span id="cardDistance">0</span></div>
+        <div>状態: <span id="gameState">待機中</span></div>
+        <div>背景色: <span id="bgColor">rgb(0,0,0)</span></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // ゲーム変数
+        let scene, camera, renderer, card;
+        let accelerationData = { x: 0, y: 0, z: 0 };
+        let cardPosition = { x: 0, y: 0, z: 0 };
+        let cardRotation = { x: 0, y: 0, z: 0 };
+        let isThrown = false;
+        let throwVelocity = { x: 0, y: 0, z: 0 };
+        let throwRotationVelocity = { x: 0, y: 0, z: 0 };
+        const THROW_THRESHOLD = 50;
+        const MAX_DISTANCE = -50;
+        
+        // Three.js初期化
+        function initThreeJS() {
+            // シーン作成
+            scene = new THREE.Scene();
+            
+            // カメラ作成
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 5;
+            
+            // レンダラー作成
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000);
+            document.body.appendChild(renderer.domElement);
+            renderer.domElement.id = 'gameCanvas';
+            
+            // ライト追加
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 10, 5);
+            scene.add(directionalLight);
+            
+            // カード（メンコ）作成
+            createCard();
+            
+            // アニメーションループ開始
+            animate();
+        }
+        
+        function createCard() {
+            // カードのジオメトリ（画面サイズに合わせる）
+            const aspect = window.innerWidth / window.innerHeight;
+            const cardWidth = 3 * aspect;
+            const cardHeight = 3;
+            
+            const geometry = new THREE.PlaneGeometry(cardWidth, cardHeight);
+            const material = new THREE.MeshLambertMaterial({ 
+                color: 0xffffff,
+                side: THREE.DoubleSide
+            });
+            
+            card = new THREE.Mesh(geometry, material);
+            card.position.set(0, 0, 0);
+            scene.add(card);
+        }
+        
+        function updateCard() {
+            if (!isThrown) {
+                // Z軸加速度に基づいてカードの位置を更新
+                const zAccel = Math.abs(accelerationData.z);
+                cardPosition.z = -zAccel * 0.1; // 近づいたり遠ざかったり
+                
+                // 閾値チェック
+                if (zAccel > THROW_THRESHOLD) {
+                    throwCard();
+                }
+                
+                document.getElementById('cardDistance').textContent = cardPosition.z.toFixed(2);
+                document.getElementById('gameState').textContent = '準備中';
+            } else {
+                // 投げられた後の物理演算
+                cardPosition.x += throwVelocity.x;
+                cardPosition.y += throwVelocity.y;
+                cardPosition.z += throwVelocity.z;
+                
+                cardRotation.x += throwRotationVelocity.x;
+                cardRotation.y += throwRotationVelocity.y;
+                cardRotation.z += throwRotationVelocity.z;
+                
+                // 重力効果
+                throwVelocity.y -= 0.01;
+                
+                // 空気抵抗
+                throwVelocity.x *= 0.99;
+                throwVelocity.y *= 0.99;
+                throwVelocity.z *= 0.99;
+                
+                // 回転の減衰
+                throwRotationVelocity.x *= 0.98;
+                throwRotationVelocity.y *= 0.98;
+                throwRotationVelocity.z *= 0.98;
+                
+                document.getElementById('cardDistance').textContent = cardPosition.z.toFixed(2);
+                document.getElementById('gameState').textContent = '投げ中';
+                
+                // 十分遠くに行ったら、または地面に落ちたらリセット
+                if (cardPosition.z < MAX_DISTANCE || cardPosition.y < -10) {
+                    resetCard();
+                }
+            }
+            
+            // カードの位置と回転を適用
+            card.position.set(cardPosition.x, cardPosition.y, cardPosition.z);
+            card.rotation.set(cardRotation.x, cardRotation.y, cardRotation.z);
+        }
+        
+        function throwCard() {
+            isThrown = true;
+            
+            // 投げる速度を設定（加速度に基づく）
+            throwVelocity.x = (accelerationData.x || 0) * 0.02;
+            throwVelocity.y = (accelerationData.y || 0) * 0.02;
+            throwVelocity.z = -Math.abs(accelerationData.z) * 0.05; // 奥に向かって
+            
+            // 回転速度を設定
+            throwRotationVelocity.x = (Math.random() - 0.5) * 0.3;
+            throwRotationVelocity.y = (Math.random() - 0.5) * 0.3;
+            throwRotationVelocity.z = (Math.random() - 0.5) * 0.2;
+            
+            document.getElementById('gameState').textContent = '投げました！';
+        }
+        
+        function resetCard() {
+            // カードを元の位置に戻す
+            cardPosition = { x: 0, y: 0, z: 0 };
+            cardRotation = { x: 0, y: 0, z: 0 };
+            throwVelocity = { x: 0, y: 0, z: 0 };
+            throwRotationVelocity = { x: 0, y: 0, z: 0 };
+            isThrown = false;
+            
+            document.getElementById('gameState').textContent = 'リセット完了';
+        }
+        
+        function updateBackgroundColor() {
+            // 加速度の値を0-255の範囲にマッピング
+            const normalize = (value, min = -10, max = 10) => {
+                const normalized = ((value - min) / (max - min)) * 255;
+                return Math.max(0, Math.min(255, Math.round(normalized)));
+            };
+            
+            const red = normalize(accelerationData.x);
+            const green = normalize(accelerationData.y);
+            const blue = normalize(accelerationData.z);
+            
+            document.body.style.backgroundColor = `rgb(${red}, ${green}, ${blue})`;
+            document.getElementById('bgColor').textContent = `rgb(${red}, ${green}, ${blue})`;
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            updateCard();
+            updateBackgroundColor();
+            
+            renderer.render(scene, camera);
+        }
+        
+        // センサー許可要求
+        function requestSensorPermission() {
+            if (typeof DeviceMotionEvent !== 'undefined' && 
+                typeof DeviceMotionEvent.requestPermission === 'function') {
+                DeviceMotionEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            startGame();
+                        } else {
+                            alert('センサーアクセスが許可されませんでした');
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                // Android等
+                startGame();
+            }
+        }
+        
+        function startGame() {
+            // 許可ダイアログを隠す
+            document.getElementById('permissionDialog').style.display = 'none';
+            
+            // Three.js初期化
+            initThreeJS();
+            
+            // センサーイベントリスナー追加
+            window.addEventListener('devicemotion', handleMotion);
+            
+            document.getElementById('gameState').textContent = 'ゲーム開始';
+        }
+        
+        function handleMotion(event) {
+            const acc = event.accelerationIncludingGravity || event.acceleration;
+            
+            if (acc && acc.x !== null && acc.y !== null && acc.z !== null) {
+                accelerationData.x = acc.x || 0;
+                accelerationData.y = acc.y || 0;
+                accelerationData.z = acc.z || 0;
+                
+                document.getElementById('zAccel').textContent = accelerationData.z.toFixed(2);
+            }
+        }
+        
+        // ウィンドウリサイズ対応
+        window.addEventListener('resize', () => {
+            if (camera && renderer) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
+        
+        // ページ読み込み完了時に自動的に許可要求
+        window.addEventListener('load', () => {
+            // 少し遅延してから自動で許可要求
+            setTimeout(() => {
+                if (document.getElementById('permissionDialog').style.display !== 'none') {
+                    // iOSの場合は手動でボタンを押す必要がある
+                    if (typeof DeviceMotionEvent !== 'undefined' && 
+                        typeof DeviceMotionEvent.requestPermission === 'function') {
+                        // iOSの場合はユーザー操作が必要
+                        return;
+                    } else {
+                        // Androidの場合は自動実行
+                        requestSensorPermission();
+                    }
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
