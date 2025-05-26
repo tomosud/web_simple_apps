@@ -67,13 +67,6 @@
         <button onclick="requestSensorPermission()">ゲーム開始</button>
     </div>
     
-    <div id="info">
-        <div>Z軸加速度: <span id="zAccel">0.00</span></div>
-        <div>カード距離: <span id="cardDistance">0</span></div>
-        <div>状態: <span id="gameState">待機中</span></div>
-        <div>投げ速度: <span id="throwSpeed">0</span></div>
-        <div>飛んだカード: <span id="flyingCards">0/50</span></div>
-    </div>
 
     <div id="scoreEffect" style="
         position: fixed;
@@ -230,8 +223,6 @@
                     throwCard();
                 }
                 
-                document.getElementById('cardDistance').textContent = cardPosition.z.toFixed(2);
-                document.getElementById('gameState').textContent = '準備中';
             } else {
                 // 投げられた後の物理演算
                 cardPosition.x += throwVelocity.x;
@@ -255,8 +246,6 @@
                 throwRotationVelocity.y *= 0.98;
                 throwRotationVelocity.z *= 0.98;
                 
-                document.getElementById('cardDistance').textContent = cardPosition.z.toFixed(2);
-                document.getElementById('gameState').textContent = '投げ中';
                 
                 // 床に当たったかチェック（奥行き方向）
                 if (cardPosition.z <= FLOOR_Z) {
@@ -304,8 +293,6 @@
             // 床のカードを飛ばす
             scatterFloorCards(cardPosition.x, cardPosition.y, speed);
             
-            document.getElementById('throwSpeed').textContent = speed.toFixed(2);
-            document.getElementById('gameState').textContent = '床に衝突！';
             
             // カードをリセット
             setTimeout(() => {
@@ -365,8 +352,6 @@
         }
         
         function updateScoreDisplay() {
-            document.getElementById('flyingCards').textContent = `${flyingCardCount}/${FLOOR_CARD_COUNT}`;
-            
             // 全部飛んだらPerfect表示
             if (flyingCardCount >= FLOOR_CARD_COUNT) {
                 showPerfectEffect();
@@ -497,8 +482,6 @@
             // スコアリセット
             flyingCardCount = 0;
             updateScoreDisplay();
-            
-            document.getElementById('gameState').textContent = 'リセット完了';
         }
         
         
@@ -506,10 +489,10 @@
             // 角度センサーの値を使ってカメラの位置を微調整（視差効果）
             const maxOffset = 2; // カメラの最大移動距離
             
-            // γ（左右の傾き）でX軸移動
-            const xOffset = (orientationData.gamma / 90) * maxOffset;
-            // β（前後の傾き）でY軸移動
-            const yOffset = (orientationData.beta / 180) * maxOffset;
+            // γ（左右の傾き）でX軸移動（逆向き）
+            const xOffset = -(orientationData.gamma / 90) * maxOffset;
+            // β（前後の傾き）でY軸移動（逆向き）
+            const yOffset = -(orientationData.beta / 180) * maxOffset;
             
             // カメラ位置を更新（滑らかに移動）
             camera.position.x += (xOffset - camera.position.x) * 0.1;
@@ -572,8 +555,6 @@
             // センサーイベントリスナー追加
             window.addEventListener('devicemotion', handleMotion);
             window.addEventListener('deviceorientation', handleOrientation);
-            
-            document.getElementById('gameState').textContent = 'ゲーム開始';
         }
         
         function loadTextures() {
@@ -615,7 +596,6 @@
                 accelerationData.y = acc.y || 0;
                 accelerationData.z = acc.z || 0;
                 
-                document.getElementById('zAccel').textContent = accelerationData.z.toFixed(2);
             }
         }
         
@@ -623,10 +603,6 @@
             orientationData.alpha = event.alpha || 0; // Z軸回転
             orientationData.beta = event.beta || 0;   // X軸回転（前後の傾き）
             orientationData.gamma = event.gamma || 0; // Y軸回転（左右の傾き）
-            
-            // デバッグ表示を更新
-            document.getElementById('gamma').textContent = orientationData.gamma.toFixed(1);
-            document.getElementById('beta').textContent = orientationData.beta.toFixed(1);
         }
         
         // ウィンドウリサイズ対応
