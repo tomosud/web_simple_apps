@@ -72,13 +72,29 @@
         <div>カード距離: <span id="cardDistance">0</span></div>
         <div>状態: <span id="gameState">待機中</span></div>
         <div>投げ速度: <span id="throwSpeed">0</span></div>
+        <div>飛んだカード: <span id="flyingCards">0/50</span></div>
     </div>
+
+    <div id="scoreEffect" style="
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 10px;
+        font-weight: bold;
+        color: #FFD700;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        pointer-events: none;
+        z-index: 200;
+        display: none;
+    "></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
         // ゲーム変数
         let scene, camera, renderer, playerCard, floor;
         let floorCards = []; // 床に置かれたカード
+        let flyingCardCount = 0; // 飛んだカードの数
         let accelerationData = { x: 0, y: 0, z: 0 };
         let orientationData = { alpha: 0, beta: 0, gamma: 0 };
         let cardPosition = { x: 0, y: 0, z: 0 };
@@ -90,7 +106,7 @@
         const FLOOR_Z = -150; // 床の位置（奥行き方向）
         const CARD_SIZE_MULTIPLIER = 3; // カードサイズを倍に
         const CARD_WIDTH_RATIO = 0.9; // カードを90%の幅に
-        const FLOOR_CARD_COUNT = 10; // 床に置くカード数
+        const FLOOR_CARD_COUNT = 50; // 床に置くカード数
         
         // テクスチャ
         let frontTexture, backTexture;
@@ -180,9 +196,9 @@
                 
                 const floorCard = new THREE.Mesh(geometry, material);
                 
-                // 床の前面にランダムに配置
-                const x = (Math.random() - 0.5) * 80;
-                const y = (Math.random() - 0.5) * 80;
+                // 床の前面により広い範囲にランダムに配置
+                const x = (Math.random() - 0.5) * 120;
+                const y = (Math.random() - 0.5) * 120;
                 floorCard.position.set(x, y, FLOOR_Z + 1);
                 
                 // カードの状態を保存
@@ -191,7 +207,8 @@
                     velocity: { x: 0, y: 0, z: 0 },
                     rotationVelocity: { x: 0, y: 0, z: 0 },
                     isFlying: false,
-                    hasLanded: false
+                    hasLanded: false,
+                    hasFlown: false // 一度でも飛んだかどうか
                 };
                 
                 floorCards.push(floorCard);
@@ -297,6 +314,10 @@
         }
         
         function scatterFloorCards(impactX, impactY, speed) {
+            // 加速度に応じた衝撃範囲（速度が速いほど広範囲）
+            const impactRange = Math.min(20 + speed * 2, 60);
+            let newFlyingCards = 0;
+            
             floorCards.forEach(card => {
                 const distance = Math.sqrt(
                     Math.pow(card.position.x - impactX, 2) +
@@ -304,9 +325,15 @@
                 );
                 
                 // 衝撃範囲内のカードを飛ばす
-                if (distance < 20 && !card.userData.isFlying) {
+                if (distance < impactRange && !card.userData.isFlying) {
                     card.userData.isFlying = true;
                     card.userData.hasLanded = false;
+                    
+                    // まだ飛んだことがないカードをカウント
+                    if (!card.userData.hasFlown) {
+                        card.userData.hasFlown = true;
+                        newFlyingCards++;
+                    }
                     
                     // 飛び散る方向と速度
                     const direction = {
@@ -314,7 +341,7 @@
                         y: (card.position.y - impactY) / distance
                     };
                     
-                    const force = Math.max(0.5, (20 - distance) / 20) * speed * 0.3;
+                    const force = Math.max(0.5, (impactRange - distance) / impactRange) * speed * 0.3;
                     
                     card.userData.velocity.x = direction.x * force;
                     card.userData.velocity.y = direction.y * force;
@@ -326,6 +353,85 @@
                     card.userData.rotationVelocity.z = (Math.random() - 0.5) * 0.2;
                 }
             });
+            
+            // 飛んだカード数を更新
+            flyingCardCount += newFlyingCards;
+            updateScoreDisplay();
+            
+            // スコアエフェクトを表示
+            if (newFlyingCards > 0) {
+                showScoreEffect(newFlyingCards);
+            }
+        }
+        
+        function updateScoreDisplay() {
+            document.getElementById('flyingCards').textContent = `${flyingCardCount}/${FLOOR_CARD_COUNT}`;
+            
+            // 全部飛んだらPerfect表示
+            if (flyingCardCount >= FLOOR_CARD_COUNT) {
+                showPerfectEffect();
+            }
+        }
+        
+        function showScoreEffect(count) {
+            const scoreElement = document.getElementById('scoreEffect');
+            scoreElement.textContent = `+${count}`;
+            scoreElement.style.display = 'block';
+            scoreElement.style.fontSize = '10px';
+            scoreElement.style.opacity = '0';
+            
+            // アニメーション開始
+            let scale = 0.1;
+            let opacity = 1;
+            
+            const animate = () => {
+                scale += 0.15;
+                opacity -= 0.02;
+                
+                scoreElement.style.fontSize = `${scale * 100}px`;
+                scoreElement.style.opacity = opacity;
+                
+                if (opacity > 0 && scale < 5) {
+                    requestAnimationFrame(animate);
+                } else {
+                    scoreElement.style.display = 'none';
+                }
+            };
+            
+            animate();
+        }
+        
+        function showPerfectEffect() {
+            const scoreElement = document.getElementById('scoreEffect');
+            scoreElement.textContent = 'Perfect!';
+            scoreElement.style.display = 'block';
+            scoreElement.style.fontSize = '20px';
+            scoreElement.style.opacity = '0';
+            scoreElement.style.color = '#FF6B6B';
+            
+            // 派手なアニメーション
+            let scale = 0.2;
+            let opacity = 1;
+            let pulse = 0;
+            
+            const animate = () => {
+                scale += 0.1;
+                opacity -= 0.005;
+                pulse += 0.2;
+                
+                const pulseFactor = 1 + Math.sin(pulse) * 0.2;
+                scoreElement.style.fontSize = `${scale * 100 * pulseFactor}px`;
+                scoreElement.style.opacity = opacity;
+                
+                if (opacity > 0 && scale < 8) {
+                    requestAnimationFrame(animate);
+                } else {
+                    scoreElement.style.display = 'none';
+                    scoreElement.style.color = '#FFD700'; // 元の色に戻す
+                }
+            };
+            
+            animate();
         }
         
         function updateFloorCards() {
@@ -383,9 +489,14 @@
                 card.rotation.set(0, 0, 0);
                 card.userData.isFlying = false;
                 card.userData.hasLanded = false;
+                card.userData.hasFlown = false;
                 card.userData.velocity = { x: 0, y: 0, z: 0 };
                 card.userData.rotationVelocity = { x: 0, y: 0, z: 0 };
             });
+            
+            // スコアリセット
+            flyingCardCount = 0;
+            updateScoreDisplay();
             
             document.getElementById('gameState').textContent = 'リセット完了';
         }
