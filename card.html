@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>iPhone Motion Color Background</title>
+  <title>iPhone センサー背景色</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
@@ -53,17 +53,42 @@
       color: #666;
       margin-top: 10px;
     }
+    
+    #maxValues {
+      font-size: 12px;
+      color: #333;
+      margin-top: 15px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.8);
+      border-radius: 5px;
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>加速度センサー背景色</h1>
+    <h1>iPhone センサー背景色</h1>
     <button onclick="requestPermission()">センサー許可を求める</button>
+    <button onclick="resetMaxValues()" style="background: #FF3B30; margin-left: 10px;">最大値リセット</button>
+    <button onclick="toggleSensorMode()" style="background: #34C759; margin-left: 10px;">モード切替</button>
     <p id="output">データ待機中...</p>
-    <p id="colorInfo">背景色は加速度センサーの値に基づいて変化します</p>
+    <p id="colorInfo">背景色はセンサーの値に基づいて変化します</p>
+    <p id="maxValues">最大値記録: X: 0.00, Y: 0.00, Z: 0.00</p>
+    <p id="sensorInfo">センサータイプ: 待機中...</p>
   </div>
 
   <script>
+    let maxValues = { x: 0, y: 0, z: 0 };
+    
+    function resetMaxValues() {
+      maxValues = { x: 0, y: 0, z: 0 };
+      updateMaxValuesDisplay();
+    }
+    
+    function updateMaxValuesDisplay() {
+      document.getElementById('maxValues').innerText =
+        `最大値記録: X: ${maxValues.x.toFixed(2)}, Y: ${maxValues.y.toFixed(2)}, Z: ${maxValues.z.toFixed(2)}`;
+    }
+    
     function requestPermission() {
       if (
         typeof DeviceMotionEvent !== 'undefined' &&
@@ -73,6 +98,18 @@
           .then(permissionState => {
             if (permissionState === 'granted') {
               window.addEventListener('devicemotion', handleMotion);
+              // 向きセンサーも追加
+              if (typeof DeviceOrientationEvent !== 'undefined' &&
+                  typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                  .then(orientationState => {
+                    if (orientationState === 'granted') {
+                      window.addEventListener('deviceorientation', handleOrientation);
+                    }
+                  });
+              } else {
+                window.addEventListener('deviceorientation', handleOrientation);
+              }
               document.getElementById('output').innerText = 'センサーが有効になりました。デバイスを動かしてください。';
             } else {
               document.getElementById('output').innerText = '許可されませんでした';
@@ -82,34 +119,98 @@
       } else {
         // Androidなど
         window.addEventListener('devicemotion', handleMotion);
+        window.addEventListener('deviceorientation', handleOrientation);
         document.getElementById('output').innerText = 'センサーが有効になりました。デバイスを動かしてください。';
       }
     }
 
+    let currentMode = 'acceleration'; // 'acceleration' or 'orientation'
+    let orientationData = { alpha: 0, beta: 0, gamma: 0 };
+    
     function handleMotion(event) {
-      const acc = event.accelerationIncludingGravity;
+      // 純粋な加速度（重力を除去）
+      const pureAcc = event.acceleration;
+      // 重力を含む加速度
+      const accWithGravity = event.accelerationIncludingGravity;
+      
+      // 利用可能なデータを使用
+      const acc = pureAcc && pureAcc.x !== null ? pureAcc : accWithGravity;
       
       if (acc && acc.x !== null && acc.y !== null && acc.z !== null) {
-        // 加速度の値を0-255の範囲にマッピング
-        const normalize = (value, min = -10, max = 10) => {
-          const normalized = ((value - min) / (max - min)) * 255;
-          return Math.max(0, Math.min(255, Math.round(normalized)));
-        };
+        // 絶対値の最大値を記録
+        const absX = Math.abs(acc.x);
+        const absY = Math.abs(acc.y);
+        const absZ = Math.abs(acc.z);
         
-        const red = normalize(acc.x);
-        const green = normalize(acc.y);
-        const blue = normalize(acc.z);
+        if (absX > maxValues.x) maxValues.x = absX;
+        if (absY > maxValues.y) maxValues.y = absY;
+        if (absZ > maxValues.z) maxValues.z = absZ;
+        
+        if (currentMode === 'acceleration') {
+          // 加速度の値を0-255の範囲にマッピング
+          const normalize = (value, min = -10, max = 10) => {
+            const normalized = ((value - min) / (max - min)) * 255;
+            return Math.max(0, Math.min(255, Math.round(normalized)));
+          };
+          
+          const red = normalize(acc.x);
+          const green = normalize(acc.y);
+          const blue = normalize(acc.z);
+          
+          // 背景色を更新
+          document.body.style.backgroundColor = `rgb(${red}, ${green}, ${blue})`;
+          
+          // 表示を更新
+          const sensorType = pureAcc && pureAcc.x !== null ? '純粋な加速度' : '重力込み加速度';
+          document.getElementById('output').innerText =
+            `${sensorType}センサー値:\nX: ${acc.x?.toFixed(2)} → 赤: ${red}\nY: ${acc.y?.toFixed(2)} → 緑: ${green}\nZ: ${acc.z?.toFixed(2)} → 青: ${blue}`;
+          
+          document.getElementById('colorInfo').innerText =
+            `現在の背景色: rgb(${red}, ${green}, ${blue})`;
+          
+          document.getElementById('sensorInfo').innerText =
+            `使用中: ${sensorType}センサー`;
+        }
+        
+        // 最大値表示を更新
+        updateMaxValuesDisplay();
+      }
+    }
+    
+    function handleOrientation(event) {
+      orientationData.alpha = event.alpha || 0; // Z軸回転 (0-360度)
+      orientationData.beta = event.beta || 0;   // X軸回転 (-180 to 180度)
+      orientationData.gamma = event.gamma || 0; // Y軸回転 (-90 to 90度)
+      
+      if (currentMode === 'orientation') {
+        // 角度を0-255の範囲にマッピング
+        const normalizeAlpha = (value) => Math.round((value / 360) * 255);
+        const normalizeBeta = (value) => Math.round(((value + 180) / 360) * 255);
+        const normalizeGamma = (value) => Math.round(((value + 90) / 180) * 255);
+        
+        const red = normalizeAlpha(orientationData.alpha);
+        const green = normalizeBeta(orientationData.beta);
+        const blue = normalizeGamma(orientationData.gamma);
         
         // 背景色を更新
         document.body.style.backgroundColor = `rgb(${red}, ${green}, ${blue})`;
         
         // 表示を更新
         document.getElementById('output').innerText =
-          `加速度センサー値:\nX: ${acc.x?.toFixed(2)} → 赤: ${red}\nY: ${acc.y?.toFixed(2)} → 緑: ${green}\nZ: ${acc.z?.toFixed(2)} → 青: ${blue}`;
+          `角度センサー値:\nα(Z軸): ${orientationData.alpha.toFixed(1)}° → 赤: ${red}\nβ(X軸): ${orientationData.beta.toFixed(1)}° → 緑: ${green}\nγ(Y軸): ${orientationData.gamma.toFixed(1)}° → 青: ${blue}`;
         
         document.getElementById('colorInfo').innerText =
           `現在の背景色: rgb(${red}, ${green}, ${blue})`;
+        
+        document.getElementById('sensorInfo').innerText =
+          `使用中: 角度センサー (DeviceOrientation)`;
       }
+    }
+    
+    function toggleSensorMode() {
+      currentMode = currentMode === 'acceleration' ? 'orientation' : 'acceleration';
+      document.getElementById('output').innerText =
+        `モード切替: ${currentMode === 'acceleration' ? '加速度センサー' : '角度センサー'}`;
     }
   </script>
 </body>
