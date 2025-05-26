@@ -4,19 +4,18 @@
 
 ## アプリ一覧
 
-
-
-https://github.com/user-attachments/assets/b9c0ff08-c6f7-43f6-9789-6f00b819b6f2
-
-
-
 ### card_game.html
+
+https://tomosud.github.io/web_simple_apps/card_game.html
+
 3Dメンコゲーム
 - 加速度センサーでカードを投げる
 - 床に散らばった50枚のカードを飛ばす
 - 投げ速度とカードの角度で飛び散る範囲が変化
 - 全カード飛ばしでPerfect演出
 - 角度センサーによる視差効果
+  
+https://github.com/user-attachments/assets/b9c0ff08-c6f7-43f6-9789-6f00b819b6f2
 
 ### card.html
 加速度センサーで背景色を変更するアプリ(デバッグ用)
