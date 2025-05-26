@@ -78,7 +78,7 @@
     <script>
         // ゲーム変数
         let scene, camera, renderer, playerCard, floor;
-        let impactEffects = []; // 衝撃エフェクト
+        let floorCards = []; // 床に置かれたカード
         let accelerationData = { x: 0, y: 0, z: 0 };
         let orientationData = { alpha: 0, beta: 0, gamma: 0 };
         let cardPosition = { x: 0, y: 0, z: 0 };
@@ -88,8 +88,9 @@
         let throwRotationVelocity = { x: 0, y: 0, z: 0 };
         const THROW_THRESHOLD = 50;
         const FLOOR_Z = -150; // 床の位置（奥行き方向）
-        const CARD_SIZE_MULTIPLIER = 1.5;
+        const CARD_SIZE_MULTIPLIER = 3; // カードサイズを倍に
         const CARD_WIDTH_RATIO = 0.9; // カードを90%の幅に
+        const FLOOR_CARD_COUNT = 10; // 床に置くカード数
         
         // テクスチャ
         let frontTexture, backTexture;
@@ -124,6 +125,9 @@
             // 床作成
             createFloor();
             
+            // 床のカード作成
+            createFloorCards();
+            
             // アニメーションループ開始
             animate();
         }
@@ -157,6 +161,42 @@
             // 床を縦に立てて奥行き方向に配置
             floor.position.set(0, 0, FLOOR_Z);
             scene.add(floor);
+        }
+        
+        function createFloorCards() {
+            floorCards = [];
+            
+            for (let i = 0; i < FLOOR_CARD_COUNT; i++) {
+                // カードのジオメトリ
+                const cardWidth = 4 * CARD_WIDTH_RATIO;
+                const cardHeight = 4;
+                const geometry = new THREE.PlaneGeometry(cardWidth, cardHeight);
+                
+                // 表向きでスタート
+                const material = new THREE.MeshLambertMaterial({
+                    map: frontTexture,
+                    side: THREE.DoubleSide
+                });
+                
+                const floorCard = new THREE.Mesh(geometry, material);
+                
+                // 床の前面にランダムに配置
+                const x = (Math.random() - 0.5) * 80;
+                const y = (Math.random() - 0.5) * 80;
+                floorCard.position.set(x, y, FLOOR_Z + 1);
+                
+                // カードの状態を保存
+                floorCard.userData = {
+                    originalPosition: { x, y, z: FLOOR_Z + 1 },
+                    velocity: { x: 0, y: 0, z: 0 },
+                    rotationVelocity: { x: 0, y: 0, z: 0 },
+                    isFlying: false,
+                    hasLanded: false
+                };
+                
+                floorCards.push(floorCard);
+                scene.add(floorCard);
+            }
         }
         
         function updateCard() {
@@ -211,8 +251,8 @@
             playerCard.position.set(cardPosition.x, cardPosition.y, cardPosition.z);
             playerCard.rotation.set(cardRotation.x, cardRotation.y, cardRotation.z);
             
-            // 衝撃エフェクトの更新
-            updateImpactEffects();
+            // 床のカードの物理演算
+            updateFloorCards();
         }
         
         function throwCard() {
@@ -239,8 +279,13 @@
                 throwVelocity.z * throwVelocity.z
             );
             
-            // 衝撃エフェクト作成（勢いに応じた強弱）
-            createImpactEffect(cardPosition.x, cardPosition.z, speed);
+            // プレイヤーカードを床で停止
+            cardPosition.z = FLOOR_Z + 1;
+            throwVelocity = { x: 0, y: 0, z: 0 };
+            throwRotationVelocity = { x: 0, y: 0, z: 0 };
+            
+            // 床のカードを飛ばす
+            scatterFloorCards(cardPosition.x, cardPosition.y, speed);
             
             document.getElementById('throwSpeed').textContent = speed.toFixed(2);
             document.getElementById('gameState').textContent = '床に衝突！';
@@ -248,7 +293,76 @@
             // カードをリセット
             setTimeout(() => {
                 resetCard();
-            }, 1000);
+            }, 2000);
+        }
+        
+        function scatterFloorCards(impactX, impactY, speed) {
+            floorCards.forEach(card => {
+                const distance = Math.sqrt(
+                    Math.pow(card.position.x - impactX, 2) +
+                    Math.pow(card.position.y - impactY, 2)
+                );
+                
+                // 衝撃範囲内のカードを飛ばす
+                if (distance < 20 && !card.userData.isFlying) {
+                    card.userData.isFlying = true;
+                    card.userData.hasLanded = false;
+                    
+                    // 飛び散る方向と速度
+                    const direction = {
+                        x: (card.position.x - impactX) / distance,
+                        y: (card.position.y - impactY) / distance
+                    };
+                    
+                    const force = Math.max(0.5, (20 - distance) / 20) * speed * 0.3;
+                    
+                    card.userData.velocity.x = direction.x * force;
+                    card.userData.velocity.y = direction.y * force;
+                    card.userData.velocity.z = Math.random() * 2 + 1; // 手前に飛ぶ
+                    
+                    // 回転を追加
+                    card.userData.rotationVelocity.x = (Math.random() - 0.5) * 0.2;
+                    card.userData.rotationVelocity.y = (Math.random() - 0.5) * 0.2;
+                    card.userData.rotationVelocity.z = (Math.random() - 0.5) * 0.2;
+                }
+            });
+        }
+        
+        function updateFloorCards() {
+            floorCards.forEach(card => {
+                if (card.userData.isFlying && !card.userData.hasLanded) {
+                    // 物理演算
+                    card.position.x += card.userData.velocity.x;
+                    card.position.y += card.userData.velocity.y;
+                    card.position.z += card.userData.velocity.z;
+                    
+                    card.rotation.x += card.userData.rotationVelocity.x;
+                    card.rotation.y += card.userData.rotationVelocity.y;
+                    card.rotation.z += card.userData.rotationVelocity.z;
+                    
+                    // 空気抵抗
+                    card.userData.velocity.x *= 0.98;
+                    card.userData.velocity.y *= 0.98;
+                    card.userData.velocity.z *= 0.98;
+                    card.userData.rotationVelocity.x *= 0.95;
+                    card.userData.rotationVelocity.y *= 0.95;
+                    card.userData.rotationVelocity.z *= 0.95;
+                    
+                    // 十分減速したら着地
+                    const totalVelocity = Math.sqrt(
+                        card.userData.velocity.x * card.userData.velocity.x +
+                        card.userData.velocity.y * card.userData.velocity.y +
+                        card.userData.velocity.z * card.userData.velocity.z
+                    );
+                    
+                    if (totalVelocity < 0.1) {
+                        card.userData.isFlying = false;
+                        card.userData.hasLanded = true;
+                        card.userData.velocity = { x: 0, y: 0, z: 0 };
+                        card.userData.rotationVelocity = { x: 0, y: 0, z: 0 };
+                    }
+                }
+            });
         }
         
         function resetCard() {
@@ -263,68 +377,19 @@
             camera.position.set(0, 0, 5);
             camera.lookAt(0, 0, 0);
             
+            // 床のカードをリセット
+            floorCards.forEach(card => {
+                card.position.copy(card.userData.originalPosition);
+                card.rotation.set(0, 0, 0);
+                card.userData.isFlying = false;
+                card.userData.hasLanded = false;
+                card.userData.velocity = { x: 0, y: 0, z: 0 };
+                card.userData.rotationVelocity = { x: 0, y: 0, z: 0 };
+            });
+            
             document.getElementById('gameState').textContent = 'リセット完了';
         }
         
-        function updateImpactEffects() {
-            for (let i = impactEffects.length - 1; i >= 0; i--) {
-                const effect = impactEffects[i];
-                const userData = effect.userData;
-                
-                // 勢いに応じた拡大速度でエフェクトを拡大
-                effect.scale.x += userData.expansionSpeed;
-                effect.scale.z += userData.expansionSpeed;
-                
-                // 段階的に透明度を下げる
-                effect.material.opacity -= 0.015;
-                
-                // 最大拡大サイズに達するか透明になったら削除
-                if (effect.scale.x >= userData.maxExpansion || effect.material.opacity <= 0) {
-                    scene.remove(effect);
-                    impactEffects.splice(i, 1);
-                }
-            }
-        }
-        
-        function createImpactEffect(x, z, speed) {
-            // 勢いに応じたエフェクトサイズ
-            const baseSize = 1;
-            const maxSize = 5;
-            const effectSize = Math.min(baseSize + speed * 0.5, maxSize);
-            
-            // 勢いに応じた色の強さ
-            const intensity = Math.min(speed / 2, 1);
-            const red = Math.floor(255 * intensity);
-            const green = Math.floor(215 * intensity);
-            const blue = Math.floor(0 * intensity);
-            
-            // 衝撃エフェクトの輪っか（細くする）
-            const innerRadius = effectSize * 0.8;
-            const outerRadius = effectSize;
-            const geometry = new THREE.RingGeometry(innerRadius, outerRadius, 32);
-            const material = new THREE.MeshBasicMaterial({
-                color: (red << 16) | (green << 8) | blue,
-                transparent: true,
-                opacity: 0.9,
-                side: THREE.DoubleSide
-            });
-            const ring = new THREE.Mesh(geometry, material);
-            ring.position.set(x, 0, FLOOR_Z + 0.1);
-            // 輪っかを正面から見えるように（床に垂直）
-            ring.rotation.x = 0;
-            ring.rotation.y = 0;
-            ring.rotation.z = 0;
-            
-            // エフェクトデータを保存
-            ring.userData = {
-                initialSize: effectSize,
-                maxExpansion: effectSize * 3,
-                expansionSpeed: speed * 0.1 + 0.1
-            };
-            
-            impactEffects.push(ring);
-            scene.add(ring);
-        }
         
         function updateCameraWithOrientation() {
             // 角度センサーの値を使ってカメラの位置を微調整（視差効果）
