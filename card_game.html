@@ -72,6 +72,7 @@
         <div>カード距離: <span id="cardDistance">0</span></div>
         <div>状態: <span id="gameState">待機中</span></div>
         <div>背景色: <span id="bgColor">rgb(0,0,0)</span></div>
+        <div>視差: γ:<span id="gamma">0</span>° β:<span id="beta">0</span>°</div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -79,6 +80,7 @@
         // ゲーム変数
         let scene, camera, renderer, card;
         let accelerationData = { x: 0, y: 0, z: 0 };
+        let orientationData = { alpha: 0, beta: 0, gamma: 0 };
         let cardPosition = { x: 0, y: 0, z: 0 };
         let cardRotation = { x: 0, y: 0, z: 0 };
         let isThrown = false;
@@ -86,6 +88,7 @@
         let throwRotationVelocity = { x: 0, y: 0, z: 0 };
         const THROW_THRESHOLD = 50;
         const MAX_DISTANCE = -50;
+        const CARD_SIZE_MULTIPLIER = 1.5;
         
         // Three.js初期化
         function initThreeJS() {
@@ -119,14 +122,32 @@
         }
         
         function createCard() {
-            // カードのジオメトリ（画面サイズに合わせる）
+            // カードのジオメトリ（画面サイズに合わせて1.5倍）
             const aspect = window.innerWidth / window.innerHeight;
-            const cardWidth = 3 * aspect;
-            const cardHeight = 3;
+            const cardWidth = 3 * aspect * CARD_SIZE_MULTIPLIER;
+            const cardHeight = 3 * CARD_SIZE_MULTIPLIER;
             
             const geometry = new THREE.PlaneGeometry(cardWidth, cardHeight);
-            const material = new THREE.MeshLambertMaterial({ 
-                color: 0xffffff,
+            
+            // テクスチャローダー
+            const textureLoader = new THREE.TextureLoader();
+            const cardTexture = textureLoader.load('assets/card01.png',
+                // 読み込み成功時
+                function(texture) {
+                    console.log('テクスチャ読み込み成功');
+                },
+                // 進行状況
+                function(progress) {
+                    console.log('テクスチャ読み込み中...', progress);
+                },
+                // エラー時
+                function(error) {
+                    console.log('テクスチャ読み込み失敗:', error);
+                }
+            );
+            
+            const material = new THREE.MeshLambertMaterial({
+                map: cardTexture,
                 side: THREE.DoubleSide
             });
             
@@ -140,6 +161,9 @@
                 // Z軸加速度に基づいてカードの位置を更新
                 const zAccel = Math.abs(accelerationData.z);
                 cardPosition.z = -zAccel * 0.1; // 近づいたり遠ざかったり
+                
+                // 角度センサーで視差効果（デバイスの傾きでカメラを移動）
+                updateCameraWithOrientation();
                 
                 // 閾値チェック
                 if (zAccel > THROW_THRESHOLD) {
@@ -209,7 +233,28 @@
             throwRotationVelocity = { x: 0, y: 0, z: 0 };
             isThrown = false;
             
+            // カメラも元の位置に戻す
+            camera.position.set(0, 0, 5);
+            camera.lookAt(0, 0, 0);
+            
             document.getElementById('gameState').textContent = 'リセット完了';
+        }
+        
+        function updateCameraWithOrientation() {
+            // 角度センサーの値を使ってカメラの位置を微調整（視差効果）
+            const maxOffset = 2; // カメラの最大移動距離
+            
+            // γ（左右の傾き）でX軸移動
+            const xOffset = (orientationData.gamma / 90) * maxOffset;
+            // β（前後の傾き）でY軸移動
+            const yOffset = (orientationData.beta / 180) * maxOffset;
+            
+            // カメラ位置を更新（滑らかに移動）
+            camera.position.x += (xOffset - camera.position.x) * 0.1;
+            camera.position.y += (yOffset - camera.position.y) * 0.1;
+            
+            // カメラを常にカードの方向を向かせる
+            camera.lookAt(cardPosition.x, cardPosition.y, cardPosition.z);
         }
         
         function updateBackgroundColor() {
@@ -238,12 +283,22 @@
         
         // センサー許可要求
         function requestSensorPermission() {
-            if (typeof DeviceMotionEvent !== 'undefined' && 
+            if (typeof DeviceMotionEvent !== 'undefined' &&
                 typeof DeviceMotionEvent.requestPermission === 'function') {
                 DeviceMotionEvent.requestPermission()
                     .then(permissionState => {
                         if (permissionState === 'granted') {
-                            startGame();
+                            // 角度センサーの許可も要求
+                            if (typeof DeviceOrientationEvent !== 'undefined' &&
+                                typeof DeviceOrientationEvent.requestPermission === 'function') {
+                                DeviceOrientationEvent.requestPermission()
+                                    .then(orientationState => {
+                                        startGame();
+                                    })
+                                    .catch(console.error);
+                            } else {
+                                startGame();
+                            }
                         } else {
                             alert('センサーアクセスが許可されませんでした');
                         }
@@ -264,6 +319,7 @@
             
             // センサーイベントリスナー追加
             window.addEventListener('devicemotion', handleMotion);
+            window.addEventListener('deviceorientation', handleOrientation);
             
             document.getElementById('gameState').textContent = 'ゲーム開始';
         }
@@ -278,6 +334,16 @@
                 
                 document.getElementById('zAccel').textContent = accelerationData.z.toFixed(2);
             }
+        }
+        
+        function handleOrientation(event) {
+            orientationData.alpha = event.alpha || 0; // Z軸回転
+            orientationData.beta = event.beta || 0;   // X軸回転（前後の傾き）
+            orientationData.gamma = event.gamma || 0; // Y軸回転（左右の傾き）
+            
+            // デバッグ表示を更新
+            document.getElementById('gamma').textContent = orientationData.gamma.toFixed(1);
+            document.getElementById('beta').textContent = orientationData.beta.toFixed(1);
         }
         
         // ウィンドウリサイズ対応
