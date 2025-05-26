@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>iPhone Motion Test</title>
+</head>
+<body>
+  <button onclick="requestPermission()">センサー許可を求める</button>
+  <p id="output">データ待機中...</p>
+
+  <script>
+    function requestPermission() {
+      if (
+        typeof DeviceMotionEvent !== 'undefined' &&
+        typeof DeviceMotionEvent.requestPermission === 'function'
+      ) {
+        DeviceMotionEvent.requestPermission()
+          .then(permissionState => {
+            if (permissionState === 'granted') {
+              window.addEventListener('devicemotion', handleMotion);
+            } else {
+              document.getElementById('output').innerText = '許可されませんでした';
+            }
+          })
+          .catch(console.error);
+      } else {
+        // Androidなど
+        window.addEventListener('devicemotion', handleMotion);
+      }
+    }
+
+    function handleMotion(event) {
+      const acc = event.accelerationIncludingGravity;
+      document.getElementById('output').innerText = 
+        `X: ${acc.x?.toFixed(2)}\nY: ${acc.y?.toFixed(2)}\nZ: ${acc.z?.toFixed(2)}`;
+    }
+  </script>
+</body>
+</html>
