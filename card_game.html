@@ -87,7 +87,7 @@
         let throwVelocity = { x: 0, y: 0, z: 0 };
         let throwRotationVelocity = { x: 0, y: 0, z: 0 };
         const THROW_THRESHOLD = 50;
-        const FLOOR_Z = -30; // 床の位置（奥行き方向）
+        const FLOOR_Z = -150; // 床の位置（奥行き方向）
         const CARD_SIZE_MULTIPLIER = 1.5;
         const CARD_WIDTH_RATIO = 0.9; // カードを90%の幅に
         
@@ -298,8 +298,10 @@
             const green = Math.floor(215 * intensity);
             const blue = Math.floor(0 * intensity);
             
-            // 衝撃エフェクトの輪っか
-            const geometry = new THREE.RingGeometry(effectSize * 0.3, effectSize, 16);
+            // 衝撃エフェクトの輪っか（細くする）
+            const innerRadius = effectSize * 0.8;
+            const outerRadius = effectSize;
+            const geometry = new THREE.RingGeometry(innerRadius, outerRadius, 32);
             const material = new THREE.MeshBasicMaterial({
                 color: (red << 16) | (green << 8) | blue,
                 transparent: true,
@@ -308,8 +310,10 @@
             });
             const ring = new THREE.Mesh(geometry, material);
             ring.position.set(x, 0, FLOOR_Z + 0.1);
-            // 床が縦なので輪っかも縦向きに
+            // 輪っかを正面から見えるように（床に垂直）
+            ring.rotation.x = 0;
             ring.rotation.y = 0;
+            ring.rotation.z = 0;
             
             // エフェクトデータを保存
             ring.userData = {
