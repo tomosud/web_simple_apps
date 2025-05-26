@@ -71,14 +71,16 @@
         <div>Z軸加速度: <span id="zAccel">0.00</span></div>
         <div>カード距離: <span id="cardDistance">0</span></div>
         <div>状態: <span id="gameState">待機中</span></div>
+        <div>裏返した枚数: <span id="flippedCount">0</span>枚</div>
         <div>背景色: <span id="bgColor">rgb(0,0,0)</span></div>
-        <div>視差: γ:<span id="gamma">0</span>° β:<span id="beta">0</span>°</div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
         // ゲーム変数
-        let scene, camera, renderer, card;
+        let scene, camera, renderer, playerCard;
+        let floorCards = []; // 床に散らばったカード
+        let impactEffects = []; // 衝撃エフェクト
         let accelerationData = { x: 0, y: 0, z: 0 };
         let orientationData = { alpha: 0, beta: 0, gamma: 0 };
         let cardPosition = { x: 0, y: 0, z: 0 };
@@ -86,9 +88,15 @@
         let isThrown = false;
         let throwVelocity = { x: 0, y: 0, z: 0 };
         let throwRotationVelocity = { x: 0, y: 0, z: 0 };
+        let flippedCount = 0;
         const THROW_THRESHOLD = 50;
         const MAX_DISTANCE = -50;
         const CARD_SIZE_MULTIPLIER = 1.5;
+        const CARD_WIDTH_RATIO = 0.9; // カードを90%の幅に
+        const FLOOR_CARD_COUNT = 12; // 床に置くカード数
+        
+        // テクスチャ
+        let frontTexture, backTexture;
         
         // Three.js初期化
         function initThreeJS() {
@@ -114,46 +122,83 @@
             directionalLight.position.set(10, 10, 5);
             scene.add(directionalLight);
             
-            // カード（メンコ）作成
-            createCard();
+            // プレイヤーカード作成
+            createPlayerCard();
+            
+            // 床と床のカード作成
+            createFloor();
+            createFloorCards();
             
             // アニメーションループ開始
             animate();
         }
         
-        function createCard() {
-            // カードのジオメトリ（画面サイズに合わせて1.5倍）
+        function createPlayerCard() {
+            // プレイヤーカードのジオメトリ（90%の幅）
             const aspect = window.innerWidth / window.innerHeight;
-            const cardWidth = 3 * aspect * CARD_SIZE_MULTIPLIER;
+            const cardWidth = 3 * aspect * CARD_SIZE_MULTIPLIER * CARD_WIDTH_RATIO;
             const cardHeight = 3 * CARD_SIZE_MULTIPLIER;
             
             const geometry = new THREE.PlaneGeometry(cardWidth, cardHeight);
-            
-            // テクスチャローダー
-            const textureLoader = new THREE.TextureLoader();
-            const cardTexture = textureLoader.load('assets/card01.png',
-                // 読み込み成功時
-                function(texture) {
-                    console.log('テクスチャ読み込み成功');
-                },
-                // 進行状況
-                function(progress) {
-                    console.log('テクスチャ読み込み中...', progress);
-                },
-                // エラー時
-                function(error) {
-                    console.log('テクスチャ読み込み失敗:', error);
-                }
-            );
-            
             const material = new THREE.MeshLambertMaterial({
-                map: cardTexture,
+                map: frontTexture,
                 side: THREE.DoubleSide
             });
             
-            card = new THREE.Mesh(geometry, material);
-            card.position.set(0, 0, 0);
-            scene.add(card);
+            playerCard = new THREE.Mesh(geometry, material);
+            playerCard.position.set(0, 0, 0);
+            scene.add(playerCard);
+        }
+        
+        function createFloor() {
+            // 床の作成
+            const floorGeometry = new THREE.PlaneGeometry(50, 50);
+            const floorMaterial = new THREE.MeshLambertMaterial({
+                color: 0x228B22,
+                transparent: true,
+                opacity: 0.7
+            });
+            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2; // 水平に
+            floor.position.y = -15;
+            scene.add(floor);
+        }
+        
+        function createFloorCards() {
+            floorCards = [];
+            
+            for (let i = 0; i < FLOOR_CARD_COUNT; i++) {
+                // カードのジオメトリ
+                const cardWidth = 2 * CARD_WIDTH_RATIO;
+                const cardHeight = 2;
+                const geometry = new THREE.PlaneGeometry(cardWidth, cardHeight);
+                
+                // 表向きでスタート
+                const material = new THREE.MeshLambertMaterial({
+                    map: frontTexture,
+                    side: THREE.DoubleSide
+                });
+                
+                const floorCard = new THREE.Mesh(geometry, material);
+                
+                // ランダムな位置に配置
+                const x = (Math.random() - 0.5) * 30;
+                const z = (Math.random() - 0.5) * 30;
+                floorCard.position.set(x, -14.5, z);
+                floorCard.rotation.x = -Math.PI / 2; // 床に平行
+                
+                // カードの状態を保存
+                floorCard.userData = {
+                    isFlipped: false,
+                    originalPosition: { x, y: -14.5, z },
+                    velocity: { x: 0, y: 0, z: 0 },
+                    rotationVelocity: { x: 0, y: 0, z: 0 },
+                    isFlying: false
+                };
+                
+                floorCards.push(floorCard);
+                scene.add(floorCard);
+            }
         }
         
         function updateCard() {
@@ -204,9 +249,15 @@
                 }
             }
             
-            // カードの位置と回転を適用
-            card.position.set(cardPosition.x, cardPosition.y, cardPosition.z);
-            card.rotation.set(cardRotation.x, cardRotation.y, cardRotation.z);
+            // プレイヤーカードの位置と回転を適用
+            playerCard.position.set(cardPosition.x, cardPosition.y, cardPosition.z);
+            playerCard.rotation.set(cardRotation.x, cardRotation.y, cardRotation.z);
+            
+            // 床のカードの物理演算
+            updateFloorCards();
+            
+            // 衝撃エフェクトの更新
+            updateImpactEffects();
         }
         
         function throwCard() {
@@ -237,7 +288,145 @@
             camera.position.set(0, 0, 5);
             camera.lookAt(0, 0, 0);
             
-            document.getElementById('gameState').textContent = 'リセット完了';
+            // ゲームリセット
+            if (flippedCount > 0) {
+                setTimeout(() => {
+                    resetGame();
+                }, 2000);
+            }
+            
+            document.getElementById('gameState').textContent = `${flippedCount}枚裏返しました！`;
+        }
+        
+        function resetGame() {
+            // 床のカードをリセット
+            floorCards.forEach(card => {
+                card.userData.isFlipped = false;
+                card.material.map = frontTexture;
+                card.position.copy(card.userData.originalPosition);
+                card.rotation.set(-Math.PI / 2, 0, 0);
+                card.userData.isFlying = false;
+                card.userData.velocity = { x: 0, y: 0, z: 0 };
+            });
+            
+            // エフェクトをクリア
+            impactEffects.forEach(effect => {
+                scene.remove(effect);
+            });
+            impactEffects = [];
+            
+            flippedCount = 0;
+            document.getElementById('flippedCount').textContent = '0';
+            document.getElementById('gameState').textContent = '準備中';
+        }
+        
+        function updateFloorCards() {
+            floorCards.forEach(card => {
+                if (card.userData.isFlying) {
+                    // 物理演算
+                    card.position.x += card.userData.velocity.x;
+                    card.position.y += card.userData.velocity.y;
+                    card.position.z += card.userData.velocity.z;
+                    
+                    card.rotation.x += card.userData.rotationVelocity.x;
+                    card.rotation.y += card.userData.rotationVelocity.y;
+                    card.rotation.z += card.userData.rotationVelocity.z;
+                    
+                    // 重力
+                    card.userData.velocity.y -= 0.02;
+                    
+                    // 空気抵抗
+                    card.userData.velocity.x *= 0.98;
+                    card.userData.velocity.z *= 0.98;
+                    card.userData.rotationVelocity.x *= 0.95;
+                    card.userData.rotationVelocity.y *= 0.95;
+                    card.userData.rotationVelocity.z *= 0.95;
+                    
+                    // 床に着地
+                    if (card.position.y <= -14.5) {
+                        card.position.y = -14.5;
+                        card.userData.isFlying = false;
+                        
+                        // 裏返し判定（ランダム）
+                        if (Math.random() < 0.3 && !card.userData.isFlipped) {
+                            card.userData.isFlipped = true;
+                            card.material.map = backTexture;
+                            flippedCount++;
+                            document.getElementById('flippedCount').textContent = flippedCount;
+                        }
+                        
+                        // 床に平行に戻す
+                        card.rotation.x = -Math.PI / 2;
+                        card.rotation.y = 0;
+                        card.rotation.z = Math.random() * Math.PI * 2; // ランダムな向き
+                    }
+                }
+            });
+        }
+        
+        function updateImpactEffects() {
+            impactEffects.forEach((effect, index) => {
+                // エフェクトを拡大
+                effect.scale.x += 0.1;
+                effect.scale.z += 0.1;
+                effect.material.opacity -= 0.02;
+                
+                // 透明になったら削除
+                if (effect.material.opacity <= 0) {
+                    scene.remove(effect);
+                    impactEffects.splice(index, 1);
+                }
+            });
+        }
+        
+        function createImpactEffect(x, z) {
+            // 衝撃エフェクトの輪っか
+            const geometry = new THREE.RingGeometry(0.5, 1, 16);
+            const material = new THREE.MeshBasicMaterial({
+                color: 0xFFD700,
+                transparent: true,
+                opacity: 0.8,
+                side: THREE.DoubleSide
+            });
+            const ring = new THREE.Mesh(geometry, material);
+            ring.position.set(x, -14.4, z);
+            ring.rotation.x = -Math.PI / 2;
+            
+            impactEffects.push(ring);
+            scene.add(ring);
+        }
+        
+        function checkCollisions() {
+            // プレイヤーカードが床に到達した場合
+            if (isThrown && cardPosition.y <= -10) {
+                const impactX = cardPosition.x;
+                const impactZ = cardPosition.z;
+                
+                // 衝撃エフェクト作成
+                createImpactEffect(impactX, impactZ);
+                
+                // 近くのカードを飛ばす
+                floorCards.forEach(card => {
+                    const distance = Math.sqrt(
+                        Math.pow(card.position.x - impactX, 2) +
+                        Math.pow(card.position.z - impactZ, 2)
+                    );
+                    
+                    if (distance < 8 && !card.userData.isFlying) {
+                        // カードを飛ばす
+                        card.userData.isFlying = true;
+                        card.userData.velocity.x = (card.position.x - impactX) * 0.1;
+                        card.userData.velocity.y = Math.random() * 2 + 1;
+                        card.userData.velocity.z = (card.position.z - impactZ) * 0.1;
+                        
+                        card.userData.rotationVelocity.x = (Math.random() - 0.5) * 0.3;
+                        card.userData.rotationVelocity.y = (Math.random() - 0.5) * 0.3;
+                        card.userData.rotationVelocity.z = (Math.random() - 0.5) * 0.3;
+                    }
+                });
+                
+                resetCard();
+            }
         }
         
         function updateCameraWithOrientation() {
@@ -277,6 +466,7 @@
             
             updateCard();
             updateBackgroundColor();
+            checkCollisions();
             
             renderer.render(scene, camera);
         }
@@ -314,14 +504,45 @@
             // 許可ダイアログを隠す
             document.getElementById('permissionDialog').style.display = 'none';
             
-            // Three.js初期化
-            initThreeJS();
+            // テクスチャを読み込んでからThree.js初期化
+            loadTextures();
             
             // センサーイベントリスナー追加
             window.addEventListener('devicemotion', handleMotion);
             window.addEventListener('deviceorientation', handleOrientation);
             
             document.getElementById('gameState').textContent = 'ゲーム開始';
+        }
+        
+        function loadTextures() {
+            const textureLoader = new THREE.TextureLoader();
+            let loadedCount = 0;
+            
+            // 表面テクスチャ
+            frontTexture = textureLoader.load('assets/card01.png',
+                function(texture) {
+                    console.log('表面テクスチャ読み込み成功');
+                    loadedCount++;
+                    if (loadedCount === 2) initThreeJS();
+                },
+                undefined,
+                function(error) {
+                    console.log('表面テクスチャ読み込み失敗:', error);
+                }
+            );
+            
+            // 裏面テクスチャ
+            backTexture = textureLoader.load('assets/card02.png',
+                function(texture) {
+                    console.log('裏面テクスチャ読み込み成功');
+                    loadedCount++;
+                    if (loadedCount === 2) initThreeJS();
+                },
+                undefined,
+                function(error) {
+                    console.log('裏面テクスチャ読み込み失敗:', error);
+                }
+            );
         }
         
         function handleMotion(event) {
