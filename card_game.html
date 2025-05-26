@@ -87,7 +87,7 @@
         let throwVelocity = { x: 0, y: 0, z: 0 };
         let throwRotationVelocity = { x: 0, y: 0, z: 0 };
         const THROW_THRESHOLD = 50;
-        const FLOOR_Y = -20; // 床の位置
+        const FLOOR_Z = -30; // 床の位置（奥行き方向）
         const CARD_SIZE_MULTIPLIER = 1.5;
         const CARD_WIDTH_RATIO = 0.9; // カードを90%の幅に
         
@@ -146,16 +146,16 @@
         }
         
         function createFloor() {
-            // 床の作成（見えない衝突判定用）
+            // 床の作成（奥行き方向に配置）
             const floorGeometry = new THREE.PlaneGeometry(100, 100);
             const floorMaterial = new THREE.MeshLambertMaterial({
                 color: 0x333333,
                 transparent: true,
-                opacity: 0.3
+                opacity: 0.5
             });
             floor = new THREE.Mesh(floorGeometry, floorMaterial);
-            floor.rotation.x = -Math.PI / 2; // 水平に
-            floor.position.y = FLOOR_Y;
+            // 床を縦に立てて奥行き方向に配置
+            floor.position.set(0, 0, FLOOR_Z);
             scene.add(floor);
         }
         
@@ -201,8 +201,8 @@
                 document.getElementById('cardDistance').textContent = cardPosition.z.toFixed(2);
                 document.getElementById('gameState').textContent = '投げ中';
                 
-                // 床に当たったかチェック
-                if (cardPosition.y <= FLOOR_Y) {
+                // 床に当たったかチェック（奥行き方向）
+                if (cardPosition.z <= FLOOR_Z) {
                     hitFloor();
                 }
             }
@@ -307,8 +307,9 @@
                 side: THREE.DoubleSide
             });
             const ring = new THREE.Mesh(geometry, material);
-            ring.position.set(x, FLOOR_Y + 0.1, z);
-            ring.rotation.x = -Math.PI / 2;
+            ring.position.set(x, 0, FLOOR_Z + 0.1);
+            // 床が縦なので輪っかも縦向きに
+            ring.rotation.y = 0;
             
             // エフェクトデータを保存
             ring.userData = {
