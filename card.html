@@ -1,11 +1,67 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>iPhone Motion Test</title>
+  <title>iPhone Motion Color Background</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      transition: background-color 0.1s ease;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .container {
+      background: rgba(255, 255, 255, 0.9);
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      max-width: 400px;
+      width: 90%;
+    }
+    
+    button {
+      background: #007AFF;
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-bottom: 20px;
+    }
+    
+    button:hover {
+      background: #0056b3;
+    }
+    
+    #output {
+      font-size: 14px;
+      line-height: 1.5;
+      margin: 20px 0;
+      white-space: pre-line;
+    }
+    
+    #colorInfo {
+      font-size: 12px;
+      color: #666;
+      margin-top: 10px;
+    }
+  </style>
 </head>
 <body>
-  <button onclick="requestPermission()">センサー許可を求める</button>
-  <p id="output">データ待機中...</p>
+  <div class="container">
+    <h1>加速度センサー背景色</h1>
+    <button onclick="requestPermission()">センサー許可を求める</button>
+    <p id="output">データ待機中...</p>
+    <p id="colorInfo">背景色は加速度センサーの値に基づいて変化します</p>
+  </div>
 
   <script>
     function requestPermission() {
@@ -17,6 +73,7 @@
           .then(permissionState => {
             if (permissionState === 'granted') {
               window.addEventListener('devicemotion', handleMotion);
+              document.getElementById('output').innerText = 'センサーが有効になりました。デバイスを動かしてください。';
             } else {
               document.getElementById('output').innerText = '許可されませんでした';
             }
@@ -25,13 +82,34 @@
       } else {
         // Androidなど
         window.addEventListener('devicemotion', handleMotion);
+        document.getElementById('output').innerText = 'センサーが有効になりました。デバイスを動かしてください。';
       }
     }
 
     function handleMotion(event) {
       const acc = event.accelerationIncludingGravity;
-      document.getElementById('output').innerText = 
-        `X: ${acc.x?.toFixed(2)}\nY: ${acc.y?.toFixed(2)}\nZ: ${acc.z?.toFixed(2)}`;
+      
+      if (acc && acc.x !== null && acc.y !== null && acc.z !== null) {
+        // 加速度の値を0-255の範囲にマッピング
+        const normalize = (value, min = -10, max = 10) => {
+          const normalized = ((value - min) / (max - min)) * 255;
+          return Math.max(0, Math.min(255, Math.round(normalized)));
+        };
+        
+        const red = normalize(acc.x);
+        const green = normalize(acc.y);
+        const blue = normalize(acc.z);
+        
+        // 背景色を更新
+        document.body.style.backgroundColor = `rgb(${red}, ${green}, ${blue})`;
+        
+        // 表示を更新
+        document.getElementById('output').innerText =
+          `加速度センサー値:\nX: ${acc.x?.toFixed(2)} → 赤: ${red}\nY: ${acc.y?.toFixed(2)} → 緑: ${green}\nZ: ${acc.z?.toFixed(2)} → 青: ${blue}`;
+        
+        document.getElementById('colorInfo').innerText =
+          `現在の背景色: rgb(${red}, ${green}, ${blue})`;
+      }
     }
   </script>
 </body>
