@@ -17,12 +17,6 @@ https://tomosud.github.io/web_simple_apps/card_game.html
   
 https://github.com/user-attachments/assets/b9c0ff08-c6f7-43f6-9789-6f00b819b6f2
 
-### card.html
-加速度センサーで背景色を変更するアプリ(デバッグ用)
-- X/Y/Z軸の加速度値に応じて背景色がリアルタイム変化
-- 角度センサーとの切り替え機能
-- 最大値記録機能
-- 
 ## 使用技術
 - HTML5
 - CSS3
