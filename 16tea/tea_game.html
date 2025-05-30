@@ -55,9 +55,20 @@
             height: 400px;
             background: linear-gradient(to bottom, #ecf0f1 0%, #bdc3c7 100%);
             border: 3px solid #34495e;
-            border-radius: 10px;
             margin: 20px 0;
             overflow: hidden;
+            /* ペットボトル形状 */
+            border-radius: 15px 15px 40px 40px;
+            clip-path: polygon(
+                20% 0%,   /* 上部左 */
+                80% 0%,   /* 上部右 */
+                85% 15%,  /* 首から肩 */
+                100% 25%, /* 肩右 */
+                100% 100%, /* 底右 */
+                0% 100%,   /* 底左 */
+                0% 25%,    /* 肩左 */
+                15% 15%    /* 首から肩 */
+            );
         }
 
         .target-line {
@@ -78,6 +89,19 @@
             color: #e74c3c;
             font-weight: bold;
             font-size: 14px;
+        }
+
+        .bottle-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #2c3e50;
+            font-weight: bold;
+            font-size: 1.5em;
+            text-shadow: 1px 1px 2px rgba(255,255,255,0.8);
+            z-index: 15;
+            pointer-events: none;
         }
 
         .tea-layers {
@@ -333,15 +357,16 @@
 </head>
 <body>
     <div class="container">
-        <h1>🍵 16茶ゲーム</h1>
+        <h1>🍵 16茶工場</h1>
         <p class="subtitle">4色の素材茶を積み重ねて、高さちょうど16の完璧なお茶を作りましょう</p>
         
         <div class="game-area">
             <div class="stack-container">
-                <h3>積み重ね容器</h3>
+                <h3>ペットボトル</h3>
                 <div class="stack-graph">
                     <div class="target-line"></div>
                     <div class="tea-layers" id="teaLayers"></div>
+                    <div class="bottle-text" id="bottleText">0茶</div>
                 </div>
             </div>
             
@@ -352,18 +377,13 @@
                 </div>
                 
                 <div class="info-item">
-                    <div class="info-label">現在</div>
-                    <div class="info-value height-display" id="currentHeight">0茶</div>
-                </div>
-                
-                <div class="info-item">
                     <div class="info-label">目標まで</div>
                     <div class="info-value remaining-display" id="remaining">16</div>
                 </div>
                 
                 <div class="info-item">
                     <div class="info-label">残り手数</div>
-                    <div class="info-value moves-display" id="remainingMoves">5</div>
+                    <div class="info-value moves-display" id="remainingMoves">4</div>
                 </div>
                 
                 <div class="info-item">
@@ -404,7 +424,7 @@
             lastAddedColor: null, // アニメーション用
             level: 1, // 現在の面数
             totalMoves: 0, // 全体の手数
-            remainingMoves: 5 // 残り手数
+            remainingMoves: 4 // 残り手数
         };
 
         // ローカルストレージからハイスコア読み込み
@@ -430,10 +450,10 @@
                 // 完全に新しいゲーム
                 gameState.level = 1;
                 gameState.totalMoves = 0;
-                gameState.remainingMoves = 5;
+                gameState.remainingMoves = 4;
             } else {
-                // 面クリア時は5手 + 前面の余り手数
-                gameState.remainingMoves = 5 + gameState.remainingMoves;
+                // 面クリア時は4手 + 前面の余り手数
+                gameState.remainingMoves = 4 + gameState.remainingMoves;
             }
             
             // 状態リセット
@@ -583,7 +603,7 @@
         // 表示更新
         function updateDisplay() {
             updateStackGraph();
-            document.getElementById('currentHeight').textContent = gameState.totalHeight + '茶';
+            document.getElementById('bottleText').textContent = gameState.totalHeight + '茶';
             document.getElementById('remaining').textContent = Math.max(0, 16 - gameState.totalHeight);
             document.getElementById('remainingMoves').textContent = gameState.remainingMoves;
             document.getElementById('levelDisplay').textContent = gameState.level;
