@@ -274,6 +274,41 @@
             100% { height: var(--target-height); opacity: 1; }
         }
 
+        .big-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            font-size: 4em;
+            font-weight: bold;
+            color: white;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.8);
+            background: rgba(0,0,0,0.7);
+            padding: 30px 50px;
+            border-radius: 20px;
+            display: none;
+            animation: bigMessageShow 2s ease-in-out;
+        }
+
+        @keyframes bigMessageShow {
+            0% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.3);
+            }
+            50% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1.2);
+            }
+            100% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+        }
+
+        .success-big { color: #2ecc71; }
+        .danger-big { color: #e74c3c; }
+
         @media (max-width: 600px) {
             .game-area {
                 flex-direction: column;
@@ -287,6 +322,11 @@
             .tea-button {
                 padding: 12px 20px;
                 font-size: 16px;
+            }
+            
+            .big-message {
+                font-size: 2.5em;
+                padding: 20px 30px;
             }
         }
     </style>
@@ -312,8 +352,8 @@
                 </div>
                 
                 <div class="info-item">
-                    <div class="info-label">現在の高さ</div>
-                    <div class="info-value height-display" id="currentHeight">0</div>
+                    <div class="info-label">現在</div>
+                    <div class="info-value height-display" id="currentHeight">0茶</div>
                 </div>
                 
                 <div class="info-item">
@@ -322,13 +362,8 @@
                 </div>
                 
                 <div class="info-item">
-                    <div class="info-label">手数（面）</div>
-                    <div class="info-value moves-display" id="moveCount">0</div>
-                </div>
-                
-                <div class="info-item">
-                    <div class="info-label">総手数</div>
-                    <div class="info-value" id="totalMoves">0</div>
+                    <div class="info-label">残り手数</div>
+                    <div class="info-value moves-display" id="remainingMoves">5</div>
                 </div>
                 
                 <div class="info-item">
@@ -349,14 +384,13 @@
             <button class="tea-button drink-button" onclick="drinkTea()">🍵 ちょっと飲む</button>
         </div>
         
-        <div class="control-buttons">
-            <button class="control-button new-game-button" onclick="resetGame()">新しいゲーム</button>
-        </div>
         
         <div id="message" class="message normal">
             ゲーム開始！素材茶を選んで16茶を作りましょう
         </div>
     </div>
+    
+    <div id="bigMessage" class="big-message">16茶！</div>
 
     <script>
         // ゲーム状態
@@ -369,7 +403,8 @@
             highScore: null,
             lastAddedColor: null, // アニメーション用
             level: 1, // 現在の面数
-            totalMoves: 0 // 全体の手数
+            totalMoves: 0, // 全体の手数
+            remainingMoves: 5 // 残り手数
         };
 
         // ローカルストレージからハイスコア読み込み
@@ -395,6 +430,10 @@
                 // 完全に新しいゲーム
                 gameState.level = 1;
                 gameState.totalMoves = 0;
+                gameState.remainingMoves = 5;
+            } else {
+                // 面クリア時は5手 + 前面の余り手数
+                gameState.remainingMoves = 5 + gameState.remainingMoves;
             }
             
             // 状態リセット
@@ -404,16 +443,25 @@
             gameState.isGameOver = false;
             gameState.lastAddedColor = null;
             
-            // 各色の固定値を決定（1-4）
+            // 各色の固定値を決定（1-4がひとつずつ必ず存在）
+            const values = [1, 2, 3, 4];
+            const colorNames = ['red', 'green', 'blue', 'yellow'];
+            
+            // シャッフルして各色に割り当て
+            for (let i = values.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [values[i], values[j]] = [values[j], values[i]];
+            }
+            
             gameState.teaValues = {
-                red: 1 + Math.floor(Math.random() * 4),
-                green: 1 + Math.floor(Math.random() * 4),
-                blue: 1 + Math.floor(Math.random() * 4),
-                yellow: 1 + Math.floor(Math.random() * 4)
+                red: values[0],
+                green: values[1],
+                blue: values[2],
+                yellow: values[3]
             };
             
             // 初期状態をランダム生成（1-15の高さ）
-            const colors = ['red', 'green', 'blue', 'yellow'];
+            const colors = colorNames;
             const targetInitial = 1 + Math.floor(Math.random() * 15); // 1-15
             
             let currentHeight = 0;
@@ -447,15 +495,28 @@
             updateMessage(`面${gameState.level}開始！現在の高さは${gameState.totalHeight}です。16まであと${16 - gameState.totalHeight}です。`);
         }
 
+        // 大きな演出文字を表示
+        function showBigMessage(text, type = 'success') {
+            const bigMessageElement = document.getElementById('bigMessage');
+            bigMessageElement.textContent = text;
+            bigMessageElement.className = `big-message ${type}-big`;
+            bigMessageElement.style.display = 'block';
+            
+            setTimeout(() => {
+                bigMessageElement.style.display = 'none';
+            }, 2000);
+        }
+
         // 素材茶追加
         function addTea(color) {
-            if (gameState.isGameOver) return;
+            if (gameState.isGameOver || gameState.remainingMoves <= 0) return;
             
             const value = gameState.teaValues[color]; // 固定値を使用
             gameState.colorHeights[color] += value;
             gameState.totalHeight += value;
             gameState.moveCount++;
             gameState.totalMoves++;
+            gameState.remainingMoves--;
             gameState.lastAddedColor = color; // アニメーション用
             
             updateDisplay();
@@ -464,17 +525,19 @@
             if (gameState.totalHeight > 16) {
                 // バースト - 1面からやり直し
                 gameState.isGameOver = true;
+                showBigMessage(`失敗　${gameState.totalHeight}茶！`, 'danger');
                 updateMessage(`💥 バースト！面${gameState.level}失敗しました。1面からやり直しです。`, 'danger');
                 disableTeaButtons();
                 
                 setTimeout(() => {
                     gameState.level = 1; // 1面に戻る
-                    initGame();
-                }, 2000);
+                    initGame(true); // 新しいゲーム扱い
+                }, 3000);
                 
             } else if (gameState.totalHeight === 16) {
                 // 面クリア
                 gameState.isGameOver = true;
+                showBigMessage('16茶！', 'success');
                 updateMessage(`🎉 面${gameState.level}クリア！${gameState.moveCount}手でクリアです！`, 'success');
                 disableTeaButtons();
                 
@@ -482,7 +545,6 @@
                 if (gameState.highScore === null || gameState.level > gameState.highScore) {
                     gameState.highScore = gameState.level;
                     saveHighScore();
-                    updateMessage(`🏆 新記録！面${gameState.level}達成です！`, 'success');
                 }
                 
                 setTimeout(() => {
@@ -491,7 +553,19 @@
                     setTimeout(() => {
                         initGame();
                     }, 1000);
-                }, 2000);
+                }, 3000);
+                
+            } else if (gameState.remainingMoves <= 0) {
+                // 手数切れ - ゲームオーバー
+                gameState.isGameOver = true;
+                showBigMessage('手数切れ！', 'danger');
+                updateMessage(`手数が足りませんでした。1面からやり直しです。`, 'danger');
+                disableTeaButtons();
+                
+                setTimeout(() => {
+                    gameState.level = 1;
+                    initGame(true);
+                }, 3000);
                 
             } else {
                 // 継続
@@ -509,10 +583,9 @@
         // 表示更新
         function updateDisplay() {
             updateStackGraph();
-            document.getElementById('currentHeight').textContent = gameState.totalHeight;
+            document.getElementById('currentHeight').textContent = gameState.totalHeight + '茶';
             document.getElementById('remaining').textContent = Math.max(0, 16 - gameState.totalHeight);
-            document.getElementById('moveCount').textContent = gameState.moveCount;
-            document.getElementById('totalMoves').textContent = gameState.totalMoves;
+            document.getElementById('remainingMoves').textContent = gameState.remainingMoves;
             document.getElementById('levelDisplay').textContent = gameState.level;
         }
 
@@ -566,7 +639,7 @@
 
         // ちょっと飲む機能
         function drinkTea() {
-            if (gameState.isGameOver || gameState.totalHeight === 0) return;
+            if (gameState.isGameOver || gameState.totalHeight === 0 || gameState.remainingMoves <= 0) return;
             
             const drinkAmount = 1 + Math.floor(Math.random() * 3); // 1-3のランダム
             const actualDrink = Math.min(drinkAmount, gameState.totalHeight); // 現在の高さを超えないように
@@ -590,17 +663,26 @@
             gameState.totalHeight -= actualDrink;
             gameState.moveCount++;
             gameState.totalMoves++;
+            gameState.remainingMoves--;
             gameState.lastAddedColor = null; // アニメーションリセット
             
             updateDisplay();
             
-            const remaining16 = 16 - gameState.totalHeight;
-            updateMessage(`ちょっと飲みました。現在の高さ${gameState.totalHeight}です。あと${remaining16}で16茶完成です。`, 'normal');
-        }
-
-        // ゲームリセット
-        function resetGame() {
-            initGame(true); // 完全に新しいゲーム
+            // 手数切れチェック
+            if (gameState.remainingMoves <= 0 && gameState.totalHeight !== 16) {
+                gameState.isGameOver = true;
+                showBigMessage('手数切れ！', 'danger');
+                updateMessage(`手数が足りませんでした。1面からやり直しです。`, 'danger');
+                disableTeaButtons();
+                
+                setTimeout(() => {
+                    gameState.level = 1;
+                    initGame(true);
+                }, 3000);
+            } else {
+                const remaining16 = 16 - gameState.totalHeight;
+                updateMessage(`ちょっと飲みました。現在の高さ${gameState.totalHeight}です。あと${remaining16}で16茶完成です。`, 'normal');
+            }
         }
 
         // ゲーム開始
