@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>16茶ゲーム</title>
+    <style>
+        body {
+            font-family: "Arial", sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .game-area {
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+            margin-bottom: 30px;
+        }
+
+        .stack-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stack-graph {
+            position: relative;
+            width: 120px;
+            height: 400px;
+            background: linear-gradient(to bottom, #ecf0f1 0%, #bdc3c7 100%);
+            border: 3px solid #34495e;
+            border-radius: 10px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+
+        .target-line {
+            position: absolute;
+            bottom: 25px; /* 16/16 * 375px = 375px from bottom, so 400-375 = 25px from bottom */
+            left: -10px;
+            right: -10px;
+            height: 3px;
+            background-color: #e74c3c;
+            z-index: 10;
+        }
+
+        .target-line::before {
+            content: "16";
+            position: absolute;
+            right: -25px;
+            top: -10px;
+            color: #e74c3c;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .tea-layers {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            flex-direction: column-reverse;
+        }
+
+        .tea-layer {
+            width: 100%;
+            transition: all 0.5s ease-in-out;
+            border-top: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .layer-red { background: linear-gradient(to top, #e74c3c, #c0392b); }
+        .layer-green { background: linear-gradient(to top, #27ae60, #229954); }
+        .layer-blue { background: linear-gradient(to top, #3498db, #2980b9); }
+        .layer-yellow { background: linear-gradient(to top, #f1c40f, #f39c12); }
+
+        .info-panel {
+            flex: 1;
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+        }
+
+        .info-item {
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: white;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+
+        .info-label {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            font-size: 1.2em;
+            color: #34495e;
+        }
+
+        .height-display {
+            font-size: 2em !important;
+            font-weight: bold;
+            color: #e74c3c;
+        }
+
+        .remaining-display {
+            font-size: 1.5em !important;
+            color: #27ae60;
+        }
+
+        .moves-display {
+            font-size: 1.3em !important;
+            color: #8e44ad;
+        }
+
+        .tea-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 30px 0;
+        }
+
+        .tea-button {
+            padding: 15px 25px;
+            font-size: 18px;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .tea-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+        }
+
+        .tea-button:active:not(:disabled) {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .tea-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        }
+
+        .red-button { background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; }
+        .green-button { background: linear-gradient(135deg, #27ae60, #229954); color: white; }
+        .blue-button { background: linear-gradient(135deg, #3498db, #2980b9); color: white; }
+        .yellow-button { background: linear-gradient(135deg, #f1c40f, #f39c12); color: white; }
+        .drink-button { background: linear-gradient(135deg, #8e44ad, #9b59b6); color: white; }
+
+        .control-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .control-button {
+            padding: 12px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            border: 2px solid #34495e;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background-color: white;
+        }
+
+        .control-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .new-game-button {
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+            color: white;
+            border-color: #27ae60;
+        }
+
+        .message {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 10px;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .message.normal { 
+            background: linear-gradient(135deg, #ecf0f1, #bdc3c7); 
+            color: #2c3e50;
+        }
+        .message.warning { 
+            background: linear-gradient(135deg, #f39c12, #e67e22); 
+            color: white;
+            animation: pulse 2s infinite;
+        }
+        .message.success { 
+            background: linear-gradient(135deg, #2ecc71, #27ae60); 
+            color: white;
+            animation: celebrate 0.5s ease-in-out;
+        }
+        .message.danger { 
+            background: linear-gradient(135deg, #e74c3c, #c0392b); 
+            color: white;
+            animation: shake 0.5s ease-in-out;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        @keyframes celebrate {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        .layer-animation {
+            animation: layerGrow 0.5s ease-out;
+        }
+
+        @keyframes layerGrow {
+            0% { height: 0; opacity: 0; }
+            100% { height: var(--target-height); opacity: 1; }
+        }
+
+        @media (max-width: 600px) {
+            .game-area {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .tea-buttons {
+                flex-wrap: wrap;
+            }
+            
+            .tea-button {
+                padding: 12px 20px;
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🍵 16茶ゲーム</h1>
+        <p class="subtitle">4色の素材茶を積み重ねて、高さちょうど16の完璧なお茶を作りましょう</p>
+        
+        <div class="game-area">
+            <div class="stack-container">
+                <h3>積み重ね容器</h3>
+                <div class="stack-graph">
+                    <div class="target-line"></div>
+                    <div class="tea-layers" id="teaLayers"></div>
+                </div>
+            </div>
+            
+            <div class="info-panel">
+                <div class="info-item">
+                    <div class="info-label">面数</div>
+                    <div class="info-value" id="levelDisplay" style="font-size: 1.5em !important; color: #e74c3c;">1</div>
+                </div>
+                
+                <div class="info-item">
+                    <div class="info-label">現在の高さ</div>
+                    <div class="info-value height-display" id="currentHeight">0</div>
+                </div>
+                
+                <div class="info-item">
+                    <div class="info-label">目標まで</div>
+                    <div class="info-value remaining-display" id="remaining">16</div>
+                </div>
+                
+                <div class="info-item">
+                    <div class="info-label">手数（面）</div>
+                    <div class="info-value moves-display" id="moveCount">0</div>
+                </div>
+                
+                <div class="info-item">
+                    <div class="info-label">総手数</div>
+                    <div class="info-value" id="totalMoves">0</div>
+                </div>
+                
+                <div class="info-item">
+                    <div class="info-label">ハイスコア（最高面数）</div>
+                    <div class="info-value" id="highScore">-</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="tea-buttons">
+            <button class="tea-button red-button" onclick="addTea('red')">🟥 赤茶</button>
+            <button class="tea-button green-button" onclick="addTea('green')">🟩 緑茶</button>
+            <button class="tea-button blue-button" onclick="addTea('blue')">🟦 青茶</button>
+            <button class="tea-button yellow-button" onclick="addTea('yellow')">🟨 黄茶</button>
+        </div>
+        
+        <div style="text-align: center; margin: 15px 0;">
+            <button class="tea-button drink-button" onclick="drinkTea()">🍵 ちょっと飲む</button>
+        </div>
+        
+        <div class="control-buttons">
+            <button class="control-button new-game-button" onclick="resetGame()">新しいゲーム</button>
+        </div>
+        
+        <div id="message" class="message normal">
+            ゲーム開始！素材茶を選んで16茶を作りましょう
+        </div>
+    </div>
+
+    <script>
+        // ゲーム状態
+        let gameState = {
+            teaValues: {}, // 各色の固定値 {red: 2, green: 1, blue: 4, yellow: 3}
+            colorHeights: {red: 0, green: 0, blue: 0, yellow: 0}, // 各色の積み重ね高さ
+            totalHeight: 0,
+            moveCount: 0,
+            isGameOver: false,
+            highScore: null,
+            lastAddedColor: null, // アニメーション用
+            level: 1, // 現在の面数
+            totalMoves: 0 // 全体の手数
+        };
+
+        // ローカルストレージからハイスコア読み込み
+        function loadHighScore() {
+            const stored = localStorage.getItem('tea16_highscore');
+            if (stored) {
+                gameState.highScore = parseInt(stored);
+                document.getElementById('highScore').textContent = '面' + gameState.highScore;
+            }
+        }
+
+        // ハイスコア保存
+        function saveHighScore() {
+            if (gameState.highScore !== null) {
+                localStorage.setItem('tea16_highscore', gameState.highScore.toString());
+                document.getElementById('highScore').textContent = '面' + gameState.highScore;
+            }
+        }
+
+        // ゲーム初期化
+        function initGame(isNewGame = false) {
+            if (isNewGame) {
+                // 完全に新しいゲーム
+                gameState.level = 1;
+                gameState.totalMoves = 0;
+            }
+            
+            // 状態リセット
+            gameState.colorHeights = {red: 0, green: 0, blue: 0, yellow: 0};
+            gameState.totalHeight = 0;
+            gameState.moveCount = 0;
+            gameState.isGameOver = false;
+            gameState.lastAddedColor = null;
+            
+            // 各色の固定値を決定（1-4）
+            gameState.teaValues = {
+                red: 1 + Math.floor(Math.random() * 4),
+                green: 1 + Math.floor(Math.random() * 4),
+                blue: 1 + Math.floor(Math.random() * 4),
+                yellow: 1 + Math.floor(Math.random() * 4)
+            };
+            
+            // 初期状態をランダム生成（1-15の高さ）
+            const colors = ['red', 'green', 'blue', 'yellow'];
+            const targetInitial = 1 + Math.floor(Math.random() * 15); // 1-15
+            
+            let currentHeight = 0;
+            while (currentHeight < targetInitial) {
+                const randomColor = colors[Math.floor(Math.random() * 4)];
+                const colorValue = gameState.teaValues[randomColor];
+                
+                if (currentHeight + colorValue <= targetInitial) {
+                    gameState.colorHeights[randomColor] += colorValue;
+                    currentHeight += colorValue;
+                } else {
+                    // 残りの高さを可能な色で埋める
+                    let filled = false;
+                    for (const color of colors) {
+                        const value = gameState.teaValues[color];
+                        const remaining = targetInitial - currentHeight;
+                        if (value <= remaining) {
+                            gameState.colorHeights[color] += value;
+                            currentHeight += value;
+                            filled = true;
+                            break;
+                        }
+                    }
+                    if (!filled) break;
+                }
+            }
+            
+            gameState.totalHeight = currentHeight;
+            enableTeaButtons();
+            updateDisplay();
+            updateMessage(`面${gameState.level}開始！現在の高さは${gameState.totalHeight}です。16まであと${16 - gameState.totalHeight}です。`);
+        }
+
+        // 素材茶追加
+        function addTea(color) {
+            if (gameState.isGameOver) return;
+            
+            const value = gameState.teaValues[color]; // 固定値を使用
+            gameState.colorHeights[color] += value;
+            gameState.totalHeight += value;
+            gameState.moveCount++;
+            gameState.totalMoves++;
+            gameState.lastAddedColor = color; // アニメーション用
+            
+            updateDisplay();
+            
+            // ゲーム状態チェック
+            if (gameState.totalHeight > 16) {
+                // バースト - 1面からやり直し
+                gameState.isGameOver = true;
+                updateMessage(`💥 バースト！面${gameState.level}失敗しました。1面からやり直しです。`, 'danger');
+                disableTeaButtons();
+                
+                setTimeout(() => {
+                    gameState.level = 1; // 1面に戻る
+                    initGame();
+                }, 2000);
+                
+            } else if (gameState.totalHeight === 16) {
+                // 面クリア
+                gameState.isGameOver = true;
+                updateMessage(`🎉 面${gameState.level}クリア！${gameState.moveCount}手でクリアです！`, 'success');
+                disableTeaButtons();
+                
+                // ハイスコア更新チェック（最高面数）
+                if (gameState.highScore === null || gameState.level > gameState.highScore) {
+                    gameState.highScore = gameState.level;
+                    saveHighScore();
+                    updateMessage(`🏆 新記録！面${gameState.level}達成です！`, 'success');
+                }
+                
+                setTimeout(() => {
+                    gameState.level++; // 次の面へ
+                    updateMessage(`面${gameState.level}に進みます！`, 'success');
+                    setTimeout(() => {
+                        initGame();
+                    }, 1000);
+                }, 2000);
+                
+            } else {
+                // 継続
+                const remaining = 16 - gameState.totalHeight;
+                const colorNames = {red: '赤', green: '緑', blue: '青', yellow: '黄'};
+                
+                if (remaining <= 4) {
+                    updateMessage(`${colorNames[color]}茶を注ぎました。現在の高さ${gameState.totalHeight}です。あと${remaining}で16茶完成！慎重に選びましょう！`, 'warning');
+                } else {
+                    updateMessage(`${colorNames[color]}茶を注ぎました。現在の高さ${gameState.totalHeight}です。あと${remaining}です。`, 'normal');
+                }
+            }
+        }
+
+        // 表示更新
+        function updateDisplay() {
+            updateStackGraph();
+            document.getElementById('currentHeight').textContent = gameState.totalHeight;
+            document.getElementById('remaining').textContent = Math.max(0, 16 - gameState.totalHeight);
+            document.getElementById('moveCount').textContent = gameState.moveCount;
+            document.getElementById('totalMoves').textContent = gameState.totalMoves;
+            document.getElementById('levelDisplay').textContent = gameState.level;
+        }
+
+        // 積み重ねグラフ更新
+        function updateStackGraph() {
+            const container = document.getElementById('teaLayers');
+            container.innerHTML = '';
+            
+            const maxHeight = 375; // グラフの最大高さ（px）
+            const unitHeight = maxHeight / 16; // 1単位あたりの高さ
+            
+            // 色の順序を固定（下から上へ：赤、緑、青、黄）
+            const colorOrder = ['red', 'green', 'blue', 'yellow'];
+            
+            colorOrder.forEach(color => {
+                const height = gameState.colorHeights[color];
+                if (height > 0) {
+                    const layerElement = document.createElement('div');
+                    layerElement.className = `tea-layer layer-${color}`;
+                    layerElement.style.height = (height * unitHeight) + 'px';
+                    
+                    // 最後に追加された色にアニメーション効果
+                    if (color === gameState.lastAddedColor) {
+                        layerElement.classList.add('layer-animation');
+                        layerElement.style.setProperty('--target-height', (height * unitHeight) + 'px');
+                    }
+                    
+                    container.appendChild(layerElement);
+                }
+            });
+        }
+
+        // メッセージ更新
+        function updateMessage(text, type = 'normal') {
+            const messageElement = document.getElementById('message');
+            messageElement.textContent = text;
+            messageElement.className = `message ${type}`;
+        }
+
+        // 素材茶ボタン無効化
+        function disableTeaButtons() {
+            const buttons = document.querySelectorAll('.tea-button');
+            buttons.forEach(button => button.disabled = true);
+        }
+
+        // 素材茶ボタン有効化
+        function enableTeaButtons() {
+            const buttons = document.querySelectorAll('.tea-button');
+            buttons.forEach(button => button.disabled = false);
+        }
+
+        // ちょっと飲む機能
+        function drinkTea() {
+            if (gameState.isGameOver || gameState.totalHeight === 0) return;
+            
+            const drinkAmount = 1 + Math.floor(Math.random() * 3); // 1-3のランダム
+            const actualDrink = Math.min(drinkAmount, gameState.totalHeight); // 現在の高さを超えないように
+            
+            // 上から順番に減らす（黄→青→緑→赤の順）
+            const colorOrder = ['yellow', 'blue', 'green', 'red'];
+            let remaining = actualDrink;
+            
+            for (const color of colorOrder) {
+                if (remaining <= 0) break;
+                
+                const currentHeight = gameState.colorHeights[color];
+                const reduce = Math.min(remaining, currentHeight);
+                
+                if (reduce > 0) {
+                    gameState.colorHeights[color] -= reduce;
+                    remaining -= reduce;
+                }
+            }
+            
+            gameState.totalHeight -= actualDrink;
+            gameState.moveCount++;
+            gameState.totalMoves++;
+            gameState.lastAddedColor = null; // アニメーションリセット
+            
+            updateDisplay();
+            
+            const remaining16 = 16 - gameState.totalHeight;
+            updateMessage(`ちょっと飲みました。現在の高さ${gameState.totalHeight}です。あと${remaining16}で16茶完成です。`, 'normal');
+        }
+
+        // ゲームリセット
+        function resetGame() {
+            initGame(true); // 完全に新しいゲーム
+        }
+
+        // ゲーム開始
+        loadHighScore();
+        initGame(true);
+    </script>
+</body>
+</html>

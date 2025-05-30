@@ -17,6 +17,17 @@ https://tomosud.github.io/web_simple_apps/card_game.html
   
 https://github.com/user-attachments/assets/b9c0ff08-c6f7-43f6-9789-6f00b819b6f2
 
+### 16tea/tea_game.html
+
+https://tomosud.github.io/web_simple_apps/16tea/tea_game.html
+
+16茶ゲーム（ブラックジャック風）
+- 素材を混ぜて合計16の「16茶」を作るゲーム
+- 数字が表示された素材と隠された「？」素材
+- 同じ数値の素材は同じ色でヒント表示
+- 16ちょうどを目指す戦略的なお茶作り
+- ブラックジャックのルールをベースにした新感覚ゲーム
+
 ## 使用技術
 - HTML5
 - CSS3
