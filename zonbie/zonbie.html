@@ -1110,7 +1110,7 @@
                     // createWaypointMarkers(human.currentPath);
                     
                     // ゾンビ危険度表示
-                    createDangerZones();
+                    // createDangerZones(); // モバイル向けに無効化
                     
                     console.log('=== 経路更新完了 ===');
                 }
@@ -1414,7 +1414,7 @@
             });
 
             // 危険ゾーンをリアルタイム更新
-            createDangerZones();
+            // createDangerZones(); // モバイル向けに無効化
 
             updateHUD();
             // updateDebugInfo(); // デバッグ表示を無効化
