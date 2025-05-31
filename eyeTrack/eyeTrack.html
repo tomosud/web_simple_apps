@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>視線追跡ゲーム</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+        
+        .container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        /* カメラ画像 - 左上に配置 */
+        .camera-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 240px;
+            height: 180px;
+            border: 3px solid #fff;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+            z-index: 2000;
+            background-color: #000;
+        }
+        
+        /* WebGazerの要素を適切に配置 */
+        #webgazerVideoFeed {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover !important;
+            position: relative !important;
+            z-index: 2001 !important;
+        }
+        
+        #webgazerVideoCanvas {
+            display: none !important;
+        }
+        
+        #webgazerFaceOverlay {
+            display: none !important;
+        }
+        
+        #webgazerFaceFeedbackBox {
+            display: none !important;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .camera-container {
+                width: 160px;
+                height: 120px;
+                top: 10px;
+                left: 10px;
+            }
+        }
+        
+        /* キャリブレーションポイント */
+        .calibration-point {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background: radial-gradient(circle, #ff6b6b, #ee5a5a);
+            border: 4px solid #fff;
+            border-radius: 50%;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 18px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+            transform: translate(-50%, -50%);
+            transition: all 0.3s ease;
+            animation: pulse 2s infinite;
+            z-index: 3000;
+        }
+        
+        .calibration-point:hover {
+            transform: translate(-50%, -50%) scale(1.1);
+        }
+        
+        .calibration-point.active {
+            display: flex;
+        }
+        
+        @keyframes pulse {
+            0% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
+            50% { transform: translate(-50%, -50%) scale(1.05); box-shadow: 0 8px 25px rgba(255,107,107,0.5); }
+            100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
+        }
+        
+        /* 視線追跡キャンバス */
+        #gazeCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 2500;
+        }
+        
+        /* カメラ上の視線ライン用キャンバス */
+        #cameraGazeCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 2100;
+        }
+        
+        /* ステータス表示 */
+        .status-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+            min-width: 250px;
+            z-index: 1000;
+        }
+        
+        .status-panel h3 {
+            color: #333;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .status-text {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+            text-align: center;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            margin: 15px 0;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #8BC34A);
+            border-radius: 4px;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        /* スマホ対応 */
+        @media (max-width: 768px) {
+            .status-panel {
+                top: 10px;
+                right: 10px;
+                left: 10px;
+                margin-left: 180px;
+                min-width: auto;
+                padding: 15px;
+            }
+            
+            .status-panel h3 {
+                font-size: 16px;
+                margin-bottom: 10px;
+            }
+            
+            .status-text {
+                font-size: 12px;
+            }
+        }
+        
+        /* 開始ボタン */
+        .start-button {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px 40px;
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+        
+        .start-button:hover {
+            transform: translate(-50%, -50%) scale(1.05);
+            box-shadow: 0 12px 30px rgba(0,0,0,0.4);
+        }
+        
+        .start-button:active {
+            transform: translate(-50%, -50%) scale(0.95);
+        }
+        
+        .start-button.hidden {
+            display: none;
+        }
+        
+        /* 視線ドット */
+        .gaze-dot {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: radial-gradient(circle, #ff4444, #cc3333);
+            border: 3px solid #fff;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 600;
+            box-shadow: 0 4px 15px rgba(255, 68, 68, 0.6);
+            animation: glow 1s ease-in-out infinite alternate;
+        }
+        
+        @keyframes glow {
+            from { box-shadow: 0 4px 15px rgba(255, 68, 68, 0.6); }
+            to { box-shadow: 0 6px 20px rgba(255, 68, 68, 0.9); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- カメラ映像エリア（左上） -->
+        <div class="camera-container">
+            <!-- WebGazerのビデオがここに表示される -->
+            <!-- カメラ上の視線ライン用キャンバス -->
+            <canvas id="cameraGazeCanvas"></canvas>
+        </div>
+        
+        <!-- 視線追跡用キャンバス -->
+        <canvas id="gazeCanvas"></canvas>
+        
+        <!-- ステータスパネル -->
+        <div class="status-panel">
+            <h3>視線追跡ゲーム</h3>
+            <div class="status-text" id="statusText">
+                開始ボタンを押してください
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+        
+        <!-- 開始ボタン -->
+        <button class="start-button" id="startButton">
+            視線追跡を開始
+        </button>
+        
+        <!-- キャリブレーションポイント -->
+        <div class="calibration-point" id="point1">1</div>
+        <div class="calibration-point" id="point2">2</div>
+        <div class="calibration-point" id="point3">3</div>
+        <div class="calibration-point" id="point4">4</div>
+        <div class="calibration-point" id="point5">5</div>
+        
+        <!-- 視線位置ドット -->
+        <div class="gaze-dot" id="gazeDot" style="display: none;"></div>
+    </div>
+
+    <!-- WebGazer.js ライブラリ -->
+    <script src="webgazer.js"></script>
+    
+    <script>
+        class EyeTrackingGame {
+            constructor() {
+                this.isInitialized = false;
+                this.isCalibrating = false;
+                this.calibrationStep = 0;
+                this.calibrationPoints = [];
+                this.gazeHistory = [];
+                
+                this.canvas = document.getElementById('gazeCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.cameraCanvas = document.getElementById('cameraGazeCanvas');
+                this.cameraCtx = this.cameraCanvas.getContext('2d');
+                this.statusText = document.getElementById('statusText');
+                this.progressFill = document.getElementById('progressFill');
+                this.startButton = document.getElementById('startButton');
+                this.gazeDot = document.getElementById('gazeDot');
+                
+                this.setupCanvas();
+                this.setupCalibrationPoints();
+                this.bindEvents();
+            }
+            
+            setupCanvas() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+                
+                // カメラキャンバスのサイズ設定
+                const cameraContainer = document.querySelector('.camera-container');
+                this.cameraCanvas.width = 240;
+                this.cameraCanvas.height = 180;
+                
+                window.addEventListener('resize', () => {
+                    this.canvas.width = window.innerWidth;
+                    this.canvas.height = window.innerHeight;
+                    
+                    // カメラキャンバスサイズも更新
+                    if (window.innerWidth <= 768) {
+                        this.cameraCanvas.width = 160;
+                        this.cameraCanvas.height = 120;
+                    } else {
+                        this.cameraCanvas.width = 240;
+                        this.cameraCanvas.height = 180;
+                    }
+                });
+            }
+            
+            setupCalibrationPoints() {
+                // 5点キャリブレーション：カメラエリアを避けて配置
+                const points = [
+                    { id: 'point1', x: 35, y: 15 },      // 左上（カメラエリアを避ける）
+                    { id: 'point2', x: 85, y: 15 },      // 右上
+                    { id: 'point3', x: 50, y: 50 },      // 中央
+                    { id: 'point4', x: 15, y: 85 },      // 左下
+                    { id: 'point5', x: 85, y: 85 }       // 右下
+                ];
+                
+                points.forEach((point, index) => {
+                    const element = document.getElementById(point.id);
+                    element.style.left = point.x + '%';
+                    element.style.top = point.y + '%';
+                    
+                    element.addEventListener('click', () => {
+                        this.handleCalibrationClick(index);
+                    });
+                    
+                    this.calibrationPoints.push(element);
+                });
+            }
+            
+            bindEvents() {
+                this.startButton.addEventListener('click', () => {
+                    this.startEyeTracking();
+                });
+            }
+            
+            async startEyeTracking() {
+                try {
+                    this.updateStatus('カメラを初期化中...');
+                    this.startButton.classList.add('hidden');
+                    
+                    // WebGazer初期化
+                    await webgazer.setRegression('ridge')
+                        .setTracker('clmtrackr')
+                        .setGazeListener(this.onGazeUpdate.bind(this))
+                        .begin();
+                    
+                    // カメラ映像の設定
+                    webgazer.showVideoPreview(true)
+                           .showPredictionPoints(false)
+                           .showFaceOverlay(false)
+                           .showFaceFeedbackBox(false);
+                    
+                    // カメラ映像を専用コンテナに移動
+                    setTimeout(() => {
+                        const videoFeed = document.getElementById('webgazerVideoFeed');
+                        const cameraContainer = document.querySelector('.camera-container');
+                        if (videoFeed && cameraContainer) {
+                            cameraContainer.appendChild(videoFeed);
+                        }
+                        
+                        // 不要な要素を非表示
+                        const elementsToHide = [
+                            '#webgazerVideoCanvas',
+                            '#webgazerFaceOverlay',
+                            '#webgazerFaceFeedbackBox'
+                        ];
+                        elementsToHide.forEach(selector => {
+                            const element = document.querySelector(selector);
+                            if (element) {
+                                element.style.display = 'none';
+                            }
+                        });
+                    }, 1000);
+                    
+                    this.isInitialized = true;
+                    
+                    // 少し待ってからキャリブレーション開始
+                    setTimeout(() => {
+                        this.startCalibration();
+                    }, 2000);
+                    
+                } catch (error) {
+                    console.error('初期化エラー:', error);
+                    this.updateStatus('カメラアクセスに失敗しました');
+                    this.startButton.classList.remove('hidden');
+                }
+            }
+            
+            startCalibration() {
+                this.isCalibrating = true;
+                this.calibrationStep = 0;
+                this.updateStatus('キャリブレーション中...<br>赤い点を順番にクリックしてください');
+                this.showCalibrationPoint(0);
+            }
+            
+            showCalibrationPoint(index) {
+                // 全ての点を非表示
+                this.calibrationPoints.forEach(point => {
+                    point.classList.remove('active');
+                });
+                
+                // 指定された点を表示
+                if (index < this.calibrationPoints.length) {
+                    this.calibrationPoints[index].classList.add('active');
+                    this.updateProgress((index / this.calibrationPoints.length) * 100);
+                }
+            }
+            
+            handleCalibrationClick(index) {
+                if (!this.isCalibrating || index !== this.calibrationStep) return;
+                
+                // WebGazerにキャリブレーションデータを送信
+                const point = this.calibrationPoints[index];
+                const rect = point.getBoundingClientRect();
+                const x = rect.left + rect.width / 2;
+                const y = rect.top + rect.height / 2;
+                
+                // 複数回サンプリングしてキャリブレーション精度を向上
+                for (let i = 0; i < 5; i++) {
+                    setTimeout(() => {
+                        webgazer.recordScreenPosition(x, y);
+                    }, i * 100);
+                }
+                
+                this.calibrationStep++;
+                
+                if (this.calibrationStep < this.calibrationPoints.length) {
+                    setTimeout(() => {
+                        this.showCalibrationPoint(this.calibrationStep);
+                    }, 500);
+                } else {
+                    this.finishCalibration();
+                }
+            }
+            
+            finishCalibration() {
+                this.isCalibrating = false;
+                
+                // キャリブレーションポイントを非表示
+                this.calibrationPoints.forEach(point => {
+                    point.classList.remove('active');
+                });
+                
+                this.updateProgress(100);
+                this.updateStatus('キャリブレーション完了！<br>視線を追跡中...');
+                
+                // 視線ドットを表示
+                this.gazeDot.style.display = 'block';
+            }
+            
+            onGazeUpdate(data, timestamp) {
+                if (!data || this.isCalibrating) return;
+                
+                const x = data.x;
+                const y = data.y;
+                
+                // 視線履歴を保存（スムージング用）
+                this.gazeHistory.push({ x, y, timestamp });
+                if (this.gazeHistory.length > 10) {
+                    this.gazeHistory.shift();
+                }
+                
+                // スムージング処理
+                const smoothedGaze = this.smoothGaze();
+                
+                // 視線ドットの位置更新
+                this.gazeDot.style.left = smoothedGaze.x + 'px';
+                this.gazeDot.style.top = smoothedGaze.y + 'px';
+                
+                // 視線ライン描画
+                this.drawGazeLine(smoothedGaze.x, smoothedGaze.y);
+            }
+            
+            smoothGaze() {
+                if (this.gazeHistory.length === 0) return { x: 0, y: 0 };
+                
+                // 最新の数点の平均を取る
+                const recent = this.gazeHistory.slice(-5);
+                const avgX = recent.reduce((sum, p) => sum + p.x, 0) / recent.length;
+                const avgY = recent.reduce((sum, p) => sum + p.y, 0) / recent.length;
+                
+                return { x: avgX, y: avgY };
+            }
+            
+            drawGazeLine(gazeX, gazeY) {
+                // 全画面キャンバスをクリア
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                // カメラキャンバスをクリア
+                this.cameraCtx.clearRect(0, 0, this.cameraCanvas.width, this.cameraCanvas.height);
+                
+                // カメラ映像の位置とサイズを取得
+                const cameraContainer = document.querySelector('.camera-container');
+                const rect = cameraContainer.getBoundingClientRect();
+                
+                // WebGazerのトラッカーから目の位置を取得
+                let leftEyeX, leftEyeY, rightEyeX, rightEyeY;
+                
+                try {
+                    // WebGazerの内部トラッカーから目の位置を取得
+                    const tracker = webgazer.getTracker();
+                    if (tracker && tracker.getCurrentPosition) {
+                        const positions = tracker.getCurrentPosition();
+                        if (positions && positions.length >= 2) {
+                            // 左目と右目の位置（カメラ映像内の相対座標）
+                            leftEyeX = rect.left + (positions[0].x * rect.width);
+                            leftEyeY = rect.top + (positions[0].y * rect.height);
+                            rightEyeX = rect.left + (positions[1].x * rect.width);
+                            rightEyeY = rect.top + (positions[1].y * rect.height);
+                        } else {
+                            // フォールバック：カメラ映像内の推定位置
+                            leftEyeX = rect.left + rect.width * 0.35;
+                            leftEyeY = rect.top + rect.height * 0.45;
+                            rightEyeX = rect.left + rect.width * 0.65;
+                            rightEyeY = rect.top + rect.height * 0.45;
+                        }
+                    } else {
+                        // フォールバック：カメラ映像内の推定位置
+                        leftEyeX = rect.left + rect.width * 0.35;
+                        leftEyeY = rect.top + rect.height * 0.45;
+                        rightEyeX = rect.left + rect.width * 0.65;
+                        rightEyeY = rect.top + rect.height * 0.45;
+                    }
+                } catch (error) {
+                    // エラー時のフォールバック
+                    leftEyeX = rect.left + rect.width * 0.35;
+                    leftEyeY = rect.top + rect.height * 0.45;
+                    rightEyeX = rect.left + rect.width * 0.65;
+                    rightEyeY = rect.top + rect.height * 0.45;
+                }
+                
+                // カメラ画像上に目の位置とラインを描画
+                this.drawCameraOverlay(leftEyeX - rect.left, leftEyeY - rect.top,
+                                     rightEyeX - rect.left, rightEyeY - rect.top,
+                                     gazeX, gazeY, rect);
+                
+                // 全画面に視線ライン描画（左目から）
+                this.drawFullScreenLine(leftEyeX, leftEyeY, gazeX, gazeY, 'rgba(255, 100, 100, 0.8)');
+                
+                // 全画面に視線ライン描画（右目から）
+                this.drawFullScreenLine(rightEyeX, rightEyeY, gazeX, gazeY, 'rgba(100, 255, 100, 0.8)');
+            }
+            
+            drawCameraOverlay(leftEyeX, leftEyeY, rightEyeX, rightEyeY, gazeX, gazeY, cameraRect) {
+                // カメラ画像上の相対座標で視線ライン計算
+                const relativeGazeX = gazeX - cameraRect.left;
+                const relativeGazeY = gazeY - cameraRect.top;
+                
+                // 左目のドット
+                this.cameraCtx.beginPath();
+                this.cameraCtx.arc(leftEyeX, leftEyeY, 6, 0, 2 * Math.PI);
+                this.cameraCtx.fillStyle = 'rgba(255, 100, 100, 0.9)';
+                this.cameraCtx.fill();
+                this.cameraCtx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+                this.cameraCtx.lineWidth = 2;
+                this.cameraCtx.stroke();
+                
+                // 右目のドット
+                this.cameraCtx.beginPath();
+                this.cameraCtx.arc(rightEyeX, rightEyeY, 6, 0, 2 * Math.PI);
+                this.cameraCtx.fillStyle = 'rgba(100, 255, 100, 0.9)';
+                this.cameraCtx.fill();
+                this.cameraCtx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+                this.cameraCtx.lineWidth = 2;
+                this.cameraCtx.stroke();
+                
+                // カメラ画像内での視線方向ライン（短いライン）
+                if (relativeGazeX >= 0 && relativeGazeX <= this.cameraCanvas.width &&
+                    relativeGazeY >= 0 && relativeGazeY <= this.cameraCanvas.height) {
+                    
+                    // 左目からの短いライン
+                    this.cameraCtx.beginPath();
+                    this.cameraCtx.moveTo(leftEyeX, leftEyeY);
+                    this.cameraCtx.lineTo(relativeGazeX, relativeGazeY);
+                    this.cameraCtx.strokeStyle = 'rgba(255, 100, 100, 0.7)';
+                    this.cameraCtx.lineWidth = 2;
+                    this.cameraCtx.stroke();
+                    
+                    // 右目からの短いライン
+                    this.cameraCtx.beginPath();
+                    this.cameraCtx.moveTo(rightEyeX, rightEyeY);
+                    this.cameraCtx.lineTo(relativeGazeX, relativeGazeY);
+                    this.cameraCtx.strokeStyle = 'rgba(100, 255, 100, 0.7)';
+                    this.cameraCtx.lineWidth = 2;
+                    this.cameraCtx.stroke();
+                }
+            }
+            
+            drawFullScreenLine(eyeX, eyeY, gazeX, gazeY, color) {
+                // 視線ライン描画
+                this.ctx.beginPath();
+                this.ctx.moveTo(eyeX, eyeY);
+                this.ctx.lineTo(gazeX, gazeY);
+                
+                // グラデーション効果
+                const gradient = this.ctx.createLinearGradient(eyeX, eyeY, gazeX, gazeY);
+                gradient.addColorStop(0, color);
+                gradient.addColorStop(0.7, color.replace('0.8', '0.4'));
+                gradient.addColorStop(1, 'rgba(255, 50, 50, 0.9)');
+                
+                this.ctx.strokeStyle = gradient;
+                this.ctx.lineWidth = 3;
+                this.ctx.lineCap = 'round';
+                this.ctx.shadowColor = color.replace('0.8', '0.3');
+                this.ctx.shadowBlur = 8;
+                this.ctx.stroke();
+            }
+            
+            updateStatus(text) {
+                this.statusText.innerHTML = text;
+            }
+            
+            updateProgress(percentage) {
+                this.progressFill.style.width = percentage + '%';
+            }
+        }
+        
+        // アプリケーション開始
+        document.addEventListener('DOMContentLoaded', () => {
+            new EyeTrackingGame();
+        });
+    </script>
+</body>
+</html>
