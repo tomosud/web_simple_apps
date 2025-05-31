@@ -102,6 +102,7 @@
             max-width: 300px;
             z-index: 150;
             pointer-events: none; /* タッチイベントをゲームに透過させる */
+            display: none; /* 初期は非表示 */
         }
     </style>
 </head>
@@ -744,7 +745,7 @@
                     // ゴールからの距離ペナルティ（動的調整）
                     const goalDistance = Math.sqrt((goalX - testX) ** 2 + (goalZ - testZ) ** 2);
                     
-                    // ゴールに近い場合はペナルティを大幅軽減（曲がりくねりを防止）
+                    // ゴール近く場合はペナルティを大幅軽減（曲がりくねりを防止）
                     let goalPenalty = 0.1;
                     if (goalDistance < 10) {
                         goalPenalty = 0.02; // ゴール近くでは直線を優先
@@ -1070,7 +1071,7 @@
                 if (entity.type === 'human') {
                     entity.movement.path = entity.currentPath;
                     entity.movement.pathIndex = entity.pathIndex;
-                    entity.movement.pathUpdateTimer = entity.pathUpdateTimer;
+                    entity.movement.pathUpdateTimer = entity.timers.pathUpdateTimer;
                     entity.timers.contactTimer = entity.timers.contactTimer;
                 }
             });
@@ -1422,7 +1423,7 @@
                 if (entity.type === 'human') {
                     entity.movement.path = entity.currentPath;
                     entity.movement.pathIndex = entity.pathIndex;
-                    entity.timers.pathUpdateTimer = entity.pathUpdateTimer;
+                    entity.movement.pathUpdateTimer = entity.pathUpdateTimer;
                     entity.timers.contactTimer = entity.contactTimer;
                 }
             });
@@ -1461,7 +1462,7 @@
             gameState = 'win';
             gameRunning = false;
             document.getElementById('statusText').textContent = `ステージ${currentStage-1}クリア！`;
-            document.getElementById('startButton').textContent = `ステージ${currentStage}へ`;
+            document.getElementById('startButton').textContent = `次のステージ`;
             document.getElementById('gameStatus').style.display = 'block';
         }
 
