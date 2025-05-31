@@ -27,22 +27,6 @@
             justify-content: center;
             align-items: center;
         }
-        
-        /* スマホ縦画面用のメディアクエリ（9:16比率） */
-        @media (orientation: portrait) and (max-aspect-ratio: 9/16) {
-            #gameContainer {
-                width: 100vw;
-                height: 100vh;
-            }
-        }
-        
-        /* 横画面・PC用（16:9比率） */
-        @media (orientation: landscape) {
-            #gameContainer {
-                width: 100vw;
-                height: 100vh;
-            }
-        }
         #hud {
             position: absolute;
             top: 10px;
@@ -138,9 +122,9 @@
         let humans = [];
         let zombies = [];
 
-        // ゲーム設定
-        const FIELD_SIZE_X = 64; // 16:9比率の横幅
-        const FIELD_SIZE_Z = 36; // 16:9比率の縦幅
+        // ゲーム設定（9:16比率統一）
+        const FIELD_SIZE_X = 36; // 9:16比率の横幅
+        const FIELD_SIZE_Z = 64; // 9:16比率の縦幅
         const HUMAN_SPEED = 1.5;
         const ZOMBIE_SPEED = 1.0;
         const ZOMBIE_DOWN_TIME = 2.0;
@@ -157,7 +141,7 @@
         function initCamera() {
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             // 床下から見上げる視点（Y軸を反転）
-            camera.position.set(0, -30, 0); // カメラを遠くに移動
+            camera.position.set(0, -50, 0); // カメラをさらに遠くに移動して壁全体を見えるように
             camera.lookAt(0, 0, 0);
             camera.up.set(0, 0, 1); // Z軸を上方向に設定
             console.log('カメラ初期化完了:', camera.position);
@@ -198,10 +182,10 @@
             scene.add(floor);
 
             // 境界壁の作成
-            const wallMaterial = new THREE.MeshBasicMaterial({ 
-                color: 0x666666, 
-                transparent: true, 
-                opacity: 0.3 
+            const wallMaterial = new THREE.MeshBasicMaterial({
+                color: 0xaaaaaa,
+                transparent: true,
+                opacity: 0.8
             });
             
             // 4つの壁を作成
@@ -742,14 +726,28 @@
                     // ゴールからの距離ペナルティ（動的調整）
                     const goalDistance = Math.sqrt((goalX - testX) ** 2 + (goalZ - testZ) ** 2);
                     
-                    // ゴール近く場合はペナルティを大幅軽減（曲がりくねりを防止）
+                    // ゴール近くでの特別処理
                     let goalPenalty = 0.1;
-                    if (goalDistance < 10) {
-                        goalPenalty = 0.02; // ゴール近くでは直線を優先
+                    if (goalDistance < 8) {
+                        // ゴール至近距離では大幅に直線優先
+                        goalPenalty = 0.005;
+                        
+                        // ゴールに向かう直線上かチェック
+                        const directPath = Math.sqrt((goalX - point.x) ** 2 + (goalZ - point.z) ** 2);
+                        const currentToGoal = Math.sqrt((goalX - point.x) ** 2 + (goalZ - point.z) ** 2);
+                        const testToGoal = Math.sqrt((goalX - testX) ** 2 + (goalZ - testZ) ** 2);
+                        
+                        // ゴールに近づく移動を大幅優遇
+                        if (testToGoal < currentToGoal) {
+                            dangerScore *= 0.3; // ゴールに近づく場合は危険度を大幅減少
+                        }
+                    } else if (goalDistance < 15) {
+                        goalPenalty = 0.02; // 中距離でも直線を優先
                     }
+                    
                     // 最も近いゾンビが遠い場合もペナルティ軽減
                     if (nearestZombieDistance > HUMAN_AVOIDANCE_RANGE * 2) {
-                        goalPenalty *= 0.5; // 安全な場合は直線を優先
+                        goalPenalty *= 0.3; // 安全な場合は直線を強く優先
                     }
                     
                     dangerScore += goalDistance * goalPenalty;
