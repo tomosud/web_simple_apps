@@ -22,31 +22,25 @@
             position: relative;
             width: 100vw;
             height: 100vh;
-            max-width: 56.25vh; /* 16:9の逆比 */
-            max-height: 100vh;
             margin: 0 auto;
             display: flex;
             justify-content: center;
             align-items: center;
         }
         
-        /* スマホ縦画面用のメディアクエリ */
+        /* スマホ縦画面用のメディアクエリ（9:16比率） */
         @media (orientation: portrait) and (max-aspect-ratio: 9/16) {
             #gameContainer {
                 width: 100vw;
-                height: 177.78vw; /* 16:9比率 (16/9) = 1.7778... */
-                max-width: 100vw; /* 100vwを超えないようにする */
-                max-height: 100vh; /* 100vhを超えないようにする */
+                height: 100vh;
             }
         }
         
-        /* 横画面の場合 */
+        /* 横画面・PC用（16:9比率） */
         @media (orientation: landscape) {
             #gameContainer {
                 width: 100vw;
                 height: 100vh;
-                max-width: 100vw;
-                max-height: 100vh;
             }
         }
         #hud {
@@ -109,7 +103,7 @@
 <body>
     <div id="gameContainer">
         <div id="hud">
-            <div id="humanCount">人: 1</div>
+            <div id="stageCount">ステージ: 1</div>
             <div id="timer">時間: 0s</div>
         </div>
         <div id="gameStatus" style="display: none;">
@@ -145,7 +139,8 @@
         let zombies = [];
 
         // ゲーム設定
-        const FIELD_SIZE = 35; // エリアを拡大
+        const FIELD_SIZE_X = 64; // 16:9比率の横幅
+        const FIELD_SIZE_Z = 36; // 16:9比率の縦幅
         const HUMAN_SPEED = 1.5;
         const ZOMBIE_SPEED = 1.0;
         const ZOMBIE_DOWN_TIME = 2.0;
@@ -182,15 +177,16 @@
             directionalLight.position.set(-1, 1, 1);
             scene.add(directionalLight);
 
-            // 床グリッドの作成
-            const gridHelper = new THREE.GridHelper(FIELD_SIZE, FIELD_SIZE, 0x444444, 0x222222);
+            // 床グリッドの作成（16:9比率）
+            const gridHelper = new THREE.GridHelper(FIELD_SIZE_X, FIELD_SIZE_X, 0x444444, 0x222222);
             gridHelper.material.transparent = true;
             gridHelper.material.opacity = 0.6;
             gridHelper.name = 'ground'; // 床に名前を付ける
+            gridHelper.scale.set(1, 1, FIELD_SIZE_Z / FIELD_SIZE_X); // Z軸をスケール調整
             scene.add(gridHelper);
 
             // 実際の床面（クリック判定用）
-            const floorGeometry = new THREE.PlaneGeometry(FIELD_SIZE, FIELD_SIZE);
+            const floorGeometry = new THREE.PlaneGeometry(FIELD_SIZE_X, FIELD_SIZE_Z);
             const floorMaterial = new THREE.MeshBasicMaterial({
                 transparent: true,
                 opacity: 0.01,
@@ -213,10 +209,10 @@
             const wallThickness = 0.5;
             
             const walls = [
-                { pos: [0, wallHeight/2, FIELD_SIZE/2], size: [FIELD_SIZE, wallHeight, wallThickness] },
-                { pos: [0, wallHeight/2, -FIELD_SIZE/2], size: [FIELD_SIZE, wallHeight, wallThickness] },
-                { pos: [FIELD_SIZE/2, wallHeight/2, 0], size: [wallThickness, wallHeight, FIELD_SIZE] },
-                { pos: [-FIELD_SIZE/2, wallHeight/2, 0], size: [wallThickness, wallHeight, FIELD_SIZE] }
+                { pos: [0, wallHeight/2, FIELD_SIZE_Z/2], size: [FIELD_SIZE_X, wallHeight, wallThickness] },
+                { pos: [0, wallHeight/2, -FIELD_SIZE_Z/2], size: [FIELD_SIZE_X, wallHeight, wallThickness] },
+                { pos: [FIELD_SIZE_X/2, wallHeight/2, 0], size: [wallThickness, wallHeight, FIELD_SIZE_Z] },
+                { pos: [-FIELD_SIZE_X/2, wallHeight/2, 0], size: [wallThickness, wallHeight, FIELD_SIZE_Z] }
             ];
 
             walls.forEach(wall => {
@@ -348,35 +344,36 @@
             let door;
             const margin = 4; // 壁の端からの余白
             
-            // positionが指定されている場合はそれを使用、なければランダム
-            const pos = position !== null ? position : (Math.random() - 0.5) * (FIELD_SIZE - margin * 2);
-            
             switch (wall) {
                 case 'north':
+                    const posX = position !== null ? position : (Math.random() - 0.5) * (FIELD_SIZE_X - margin * 2);
                     door = {
-                        x: pos,
-                        z: FIELD_SIZE/2 - 2,
+                        x: posX,
+                        z: FIELD_SIZE_Z/2 - 2,
                         wall: 'north'
                     };
                     break;
                 case 'south':
+                    const posX2 = position !== null ? position : (Math.random() - 0.5) * (FIELD_SIZE_X - margin * 2);
                     door = {
-                        x: pos,
-                        z: -FIELD_SIZE/2 + 2,
+                        x: posX2,
+                        z: -FIELD_SIZE_Z/2 + 2,
                         wall: 'south'
                     };
                     break;
                 case 'east':
+                    const posZ = position !== null ? position : (Math.random() - 0.5) * (FIELD_SIZE_Z - margin * 2);
                     door = {
-                        x: FIELD_SIZE/2 - 2,
-                        z: pos,
+                        x: FIELD_SIZE_X/2 - 2,
+                        z: posZ,
                         wall: 'east'
                     };
                     break;
                 case 'west':
+                    const posZ2 = position !== null ? position : (Math.random() - 0.5) * (FIELD_SIZE_Z - margin * 2);
                     door = {
-                        x: -FIELD_SIZE/2 + 2,
-                        z: pos,
+                        x: -FIELD_SIZE_X/2 + 2,
+                        z: posZ2,
                         wall: 'west'
                     };
                     break;
@@ -706,8 +703,8 @@
                     const testX = point.x + offset.x;
                     const testZ = point.z + offset.z;
                     
-                    // 境界チェック
-                    if (Math.abs(testX) > FIELD_SIZE/2 - 2 || Math.abs(testZ) > FIELD_SIZE/2 - 2) {
+                    // 境界チェック（16:9比率対応）
+                    if (Math.abs(testX) > FIELD_SIZE_X/2 - 2 || Math.abs(testZ) > FIELD_SIZE_Z/2 - 2) {
                         return;
                     }
                     
@@ -811,8 +808,8 @@
             console.log('ゾンビを作成中...');
             const zombieCount = 10;
             for (let i = 0; i < zombieCount; i++) {
-                const x = (Math.random() - 0.5) * (FIELD_SIZE - 4);
-                const z = (Math.random() - 0.5) * (FIELD_SIZE - 4);
+                const x = (Math.random() - 0.5) * (FIELD_SIZE_X - 4);
+                const z = (Math.random() - 0.5) * (FIELD_SIZE_Z - 4);
                 createZombie(x, z);
             }
 
@@ -827,8 +824,7 @@
 
         // HUDの更新
         function updateHUD() {
-            const aliveHumans = humans.filter(h => h.alive).length;
-            document.getElementById('humanCount').textContent = `人: ${aliveHumans}`;
+            document.getElementById('stageCount').textContent = `ステージ: ${currentStage}`;
             document.getElementById('timer').textContent = `時間: ${Math.floor(gameTime)}s`;
         }
 
@@ -1166,10 +1162,10 @@
                     const moveX = avoidanceDirection.x * emergencySpeed * deltaTime;
                     const moveZ = avoidanceDirection.z * emergencySpeed * deltaTime;
                     
-                    // 境界チェック
+                    // 境界チェック（16:9比率対応）
                     const newX = human.x + moveX;
                     const newZ = human.z + moveZ;
-                    if (Math.abs(newX) < FIELD_SIZE/2 - 2 && Math.abs(newZ) < FIELD_SIZE/2 - 2) {
+                    if (Math.abs(newX) < FIELD_SIZE_X/2 - 2 && Math.abs(newZ) < FIELD_SIZE_Z/2 - 2) {
                         human.x = newX;
                         human.z = newZ;
                         human.mesh.position.set(human.x, 1.0, human.z);
