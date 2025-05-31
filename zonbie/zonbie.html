@@ -589,7 +589,7 @@
                 if (zombie.state === 'down') return;
 
                 // 危険ゾーンの細い円のみ表示
-                const visualRadius = HUMAN_AVOIDANCE_RANGE / 3; // 現在の1/3サイズ
+                const visualRadius = (HUMAN_AVOIDANCE_RANGE / 3) * 0.6; // 60%に縮小
                 const outerRadius = visualRadius;
                 const innerRadius = visualRadius - 0.1; // 非常に細いリング
                 
@@ -609,9 +609,12 @@
             });
         }
 
-        // 曲線経路計算
+        // スムーズパス計算（改善版）
         function calculateCurvePath(startX, startZ, goalX, goalZ) {
-            const numWaypoints = 5; // 中間点の数
+            // ゴールまでの距離で動的にウェイポイント数を決定
+            const totalDistance = Math.sqrt((goalX - startX) ** 2 + (goalZ - startZ) ** 2);
+            const numWaypoints = Math.max(3, Math.min(5, Math.floor(totalDistance / 8))); // 距離に応じて調整
+            
             const path = [{x: startX, z: startZ}];
             
             // 直線経路上の中間点を生成
@@ -630,12 +633,38 @@
                 let bestOffset = {x: 0, z: 0};
                 let minDanger = Infinity;
                 
-                // 複数の回避候補点を試す
+                // 細かい回避用の候補点（約2倍に増加）
                 const candidates = [
                     {x: 0, z: 0}, // 元の位置
-                    {x: 3, z: 0}, {x: -3, z: 0}, {x: 0, z: 3}, {x: 0, z: -3},
+                    
+                    // 細かい調整用（1単位刻み）
+                    {x: 1, z: 0}, {x: -1, z: 0}, {x: 0, z: 1}, {x: 0, z: -1},
+                    {x: 1, z: 1}, {x: -1, z: 1}, {x: 1, z: -1}, {x: -1, z: -1},
+                    
+                    // 基本的な4方向（1.5単位）
+                    {x: 1.5, z: 0}, {x: -1.5, z: 0}, {x: 0, z: 1.5}, {x: 0, z: -1.5},
+                    {x: 1.5, z: 1.5}, {x: -1.5, z: 1.5}, {x: 1.5, z: -1.5}, {x: -1.5, z: -1.5},
+                    
+                    // 基本的な4方向（2単位）
+                    {x: 2, z: 0}, {x: -2, z: 0}, {x: 0, z: 2}, {x: 0, z: -2},
                     {x: 2, z: 2}, {x: -2, z: 2}, {x: 2, z: -2}, {x: -2, z: -2},
-                    {x: 4, z: 0}, {x: -4, z: 0}, {x: 0, z: 4}, {x: 0, z: -4}
+                    
+                    // 中距離回避（3単位）
+                    {x: 3, z: 0}, {x: -3, z: 0}, {x: 0, z: 3}, {x: 0, z: -3},
+                    {x: 3, z: 1.5}, {x: -3, z: 1.5}, {x: 1.5, z: 3}, {x: 1.5, z: -3},
+                    {x: 3, z: -1.5}, {x: -3, z: -1.5}, {x: -1.5, z: 3}, {x: -1.5, z: -3},
+                    
+                    // 標準回避（4単位）
+                    {x: 4, z: 0}, {x: -4, z: 0}, {x: 0, z: 4}, {x: 0, z: -4},
+                    {x: 3, z: 3}, {x: -3, z: 3}, {x: 3, z: -3}, {x: -3, z: -3},
+                    
+                    // 大きな回避（5単位）
+                    {x: 5, z: 0}, {x: -5, z: 0}, {x: 0, z: 5}, {x: 0, z: -5},
+                    {x: 4, z: 3}, {x: -4, z: 3}, {x: 4, z: -3}, {x: -4, z: -3},
+                    {x: 3, z: 4}, {x: -3, z: 4}, {x: 3, z: -4}, {x: -3, z: -4},
+                    
+                    // 緊急回避用（6単位）
+                    {x: 6, z: 0}, {x: -6, z: 0}, {x: 0, z: 6}, {x: 0, z: -6}
                 ];
                 
                 candidates.forEach(offset => {
@@ -647,23 +676,51 @@
                         return;
                     }
                     
-                    // ゾンビとの危険度計算
+                    // ゾンビとの危険度計算（バランス調整版）
                     let dangerScore = 0;
+                    let tooClose = false;
+                    let nearestZombieDistance = Infinity;
+                    
                     zombies.forEach(zombie => {
                         if (zombie.state === 'down') return;
                         
                         const dx = zombie.x - testX;
                         const dz = zombie.z - testZ;
                         const distance = Math.sqrt(dx * dx + dz * dz);
+                        nearestZombieDistance = Math.min(nearestZombieDistance, distance);
                         
-                        if (distance < HUMAN_AVOIDANCE_RANGE) {
-                            dangerScore += (HUMAN_AVOIDANCE_RANGE - distance) / distance;
+                        // 絶対に近づかない距離（接触距離の2.5倍）
+                        const criticalDistance = CONTACT_DISTANCE * 2.5;
+                        if (distance < criticalDistance) {
+                            tooClose = true;
+                            dangerScore += 500; // 高いペナルティだが極端すぎない
+                        }
+                        // 回避したい距離（より滑らかなペナルティ）
+                        else if (distance < HUMAN_AVOIDANCE_RANGE) {
+                            const normalizedDistance = distance / HUMAN_AVOIDANCE_RANGE;
+                            dangerScore += (1 - normalizedDistance) * 20; // 線形的なペナルティ
                         }
                     });
                     
-                    // ゴールからの距離ペナルティ
+                    // 危険すぎる場合は候補から除外
+                    if (tooClose) {
+                        return;
+                    }
+                    
+                    // ゴールからの距離ペナルティ（動的調整）
                     const goalDistance = Math.sqrt((goalX - testX) ** 2 + (goalZ - testZ) ** 2);
-                    dangerScore += goalDistance * 0.1;
+                    
+                    // ゴールに近い場合はペナルティを大幅軽減（曲がりくねりを防止）
+                    let goalPenalty = 0.1;
+                    if (goalDistance < 10) {
+                        goalPenalty = 0.02; // ゴール近くでは直線を優先
+                    }
+                    // 最も近いゾンビが遠い場合もペナルティ軽減
+                    if (nearestZombieDistance > HUMAN_AVOIDANCE_RANGE * 2) {
+                        goalPenalty *= 0.5; // 安全な場合は直線を優先
+                    }
+                    
+                    dangerScore += goalDistance * goalPenalty;
                     
                     if (dangerScore < minDanger) {
                         minDanger = dangerScore;
@@ -1035,30 +1092,99 @@
                     console.log('=== 経路更新完了 ===');
                 }
 
-                // 経路に沿って移動
-                if (human.currentPath.length > 1 && human.pathIndex < human.currentPath.length - 1) {
-                    const currentWaypoint = human.currentPath[human.pathIndex];
-                    const nextWaypoint = human.currentPath[human.pathIndex + 1];
+                // 緊急回避チェック（移動前）
+                let emergencyAvoidance = false;
+                let avoidanceDirection = null;
+                
+                // 最も近いゾンビとの距離をチェック
+                zombies.forEach(zombie => {
+                    if (zombie.state === 'down') return;
                     
-                    const dx = nextWaypoint.x - human.x;
-                    const dz = nextWaypoint.z - human.z;
+                    const dx = zombie.x - human.x;
+                    const dz = zombie.z - human.z;
                     const distance = Math.sqrt(dx * dx + dz * dz);
                     
-                    // 次のウェイポイントに近づいたら次へ
-                    if (distance < 1.0) {
-                        human.pathIndex++;
-                        console.log(`ウェイポイント${human.pathIndex}に到達`);
-                    } else {
-                        // ウェイポイントに向かって移動
-                        const moveX = (dx / distance) * human.speed * deltaTime;
-                        const moveZ = (dz / distance) * human.speed * deltaTime;
-                        
-                        human.x += moveX;
-                        human.z += moveZ;
+                    // 緊急回避が必要な距離（より控えめに）
+                    const emergencyDistance = CONTACT_DISTANCE * 3;
+                    if (distance < emergencyDistance) {
+                        emergencyAvoidance = true;
+                        // ゾンビから逃げる方向を計算
+                        const avoidX = human.x - zombie.x;
+                        const avoidZ = human.z - zombie.z;
+                        const avoidDist = Math.sqrt(avoidX * avoidX + avoidZ * avoidZ);
+                        if (avoidDist > 0) {
+                            avoidanceDirection = {
+                                x: (avoidX / avoidDist),
+                                z: (avoidZ / avoidDist)
+                            };
+                        }
+                    }
+                });
+
+                // 緊急回避または通常移動
+                if (emergencyAvoidance && avoidanceDirection) {
+                    // 緊急回避移動
+                    const emergencySpeed = human.speed * 1.5; // 通常より速く
+                    const moveX = avoidanceDirection.x * emergencySpeed * deltaTime;
+                    const moveZ = avoidanceDirection.z * emergencySpeed * deltaTime;
+                    
+                    // 境界チェック
+                    const newX = human.x + moveX;
+                    const newZ = human.z + moveZ;
+                    if (Math.abs(newX) < FIELD_SIZE/2 - 2 && Math.abs(newZ) < FIELD_SIZE/2 - 2) {
+                        human.x = newX;
+                        human.z = newZ;
                         human.mesh.position.set(human.x, 1.0, human.z);
+                        human.direction = Math.atan2(avoidanceDirection.z, avoidanceDirection.x);
+                        console.log('緊急回避移動実行');
+                    }
+                } else {
+                    // 通常の経路に沿って移動
+                    if (human.currentPath.length > 1 && human.pathIndex < human.currentPath.length - 1) {
+                        const currentWaypoint = human.currentPath[human.pathIndex];
+                        const nextWaypoint = human.currentPath[human.pathIndex + 1];
                         
-                        // 進行方向を記録
-                        human.direction = Math.atan2(dz, dx);
+                        const dx = nextWaypoint.x - human.x;
+                        const dz = nextWaypoint.z - human.z;
+                        const distance = Math.sqrt(dx * dx + dz * dz);
+                        
+                        // 移動前に安全性をチェック
+                        let safeToMove = true;
+                        const plannedX = human.x + (dx / distance) * human.speed * deltaTime;
+                        const plannedZ = human.z + (dz / distance) * human.speed * deltaTime;
+                        
+                        zombies.forEach(zombie => {
+                            if (zombie.state === 'down') return;
+                            const checkDx = zombie.x - plannedX;
+                            const checkDz = zombie.z - plannedZ;
+                            const checkDistance = Math.sqrt(checkDx * checkDx + checkDz * checkDz);
+                            if (checkDistance < CONTACT_DISTANCE * 2) {
+                                safeToMove = false;
+                            }
+                        });
+                        
+                        if (safeToMove) {
+                            // 次のウェイポイントに近づいたら次へ
+                            if (distance < 1.0) {
+                                human.pathIndex++;
+                                console.log(`ウェイポイント${human.pathIndex}に到達`);
+                            } else {
+                                // ウェイポイントに向かって移動
+                                const moveX = (dx / distance) * human.speed * deltaTime;
+                                const moveZ = (dz / distance) * human.speed * deltaTime;
+                                
+                                human.x += moveX;
+                                human.z += moveZ;
+                                human.mesh.position.set(human.x, 1.0, human.z);
+                                
+                                // 進行方向を記録
+                                human.direction = Math.atan2(dz, dx);
+                            }
+                        } else {
+                            // 危険な移動は停止して経路再計算を促す
+                            human.pathUpdateTimer = 1.0; // 即座に再計算
+                            console.log('危険な移動を検出、経路再計算');
+                        }
                     }
                 }
 
