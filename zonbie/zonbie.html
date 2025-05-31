@@ -773,10 +773,59 @@
                     return;
                 }
 
-                // 近くのゾンビを検出して回避ベクトルを計算
-                let avoidanceX = 0;
-                let avoidanceZ = 0;
-                
+                // 経路を定期的に更新（1秒ごと）
+                human.pathUpdateTimer += deltaTime;
+                if (human.pathUpdateTimer >= 1.0 || human.currentPath.length === 0) {
+                    human.currentPath = calculateCurvePath(human.x, human.z, human.targetX, human.targetZ);
+                    human.pathIndex = 0;
+                    human.pathUpdateTimer = 0;
+                    
+                    // パス表示をクリアして再描画
+                    clearPathLines();
+                    
+                    // 詳細ログ出力
+                    logPathInfo(human.currentPath);
+                    
+                    // 曲線経路表示（明るい緑）
+                    createPathLine(human.currentPath, 0x00ff00);
+                    
+                    // ウェイポイントマーカー表示
+                    createWaypointMarkers(human.currentPath);
+                    
+                    // ゾンビ危険度表示
+                    createDangerZones();
+                    
+                    console.log('=== 経路更新完了 ===');
+                }
+
+                // 経路に沿って移動
+                if (human.currentPath.length > 1 && human.pathIndex < human.currentPath.length - 1) {
+                    const currentWaypoint = human.currentPath[human.pathIndex];
+                    const nextWaypoint = human.currentPath[human.pathIndex + 1];
+                    
+                    const dx = nextWaypoint.x - human.x;
+                    const dz = nextWaypoint.z - human.z;
+                    const distance = Math.sqrt(dx * dx + dz * dz);
+                    
+                    // 次のウェイポイントに近づいたら次へ
+                    if (distance < 1.0) {
+                        human.pathIndex++;
+                        console.log(`ウェイポイント${human.pathIndex}に到達`);
+                    } else {
+                        // ウェイポイントに向かって移動
+                        const moveX = (dx / distance) * human.speed * deltaTime;
+                        const moveZ = (dz / distance) * human.speed * deltaTime;
+                        
+                        human.x += moveX;
+                        human.z += moveZ;
+                        human.mesh.position.set(human.x, 1.0, human.z);
+                        
+                        // 進行方向を記録
+                        human.direction = Math.atan2(dz, dx);
+                    }
+                }
+
+                // ゾンビとの即死判定
                 zombies.forEach(zombie => {
                     if (zombie.state === 'down') return;
                     
@@ -784,38 +833,13 @@
                     const zombieDz = zombie.z - human.z;
                     const zombieDistance = Math.sqrt(zombieDx * zombieDx + zombieDz * zombieDz);
                     
-                    // 即死判定
                     if (zombieDistance <= CONTACT_DISTANCE) {
                         human.alive = false;
                         console.log('人が死亡しました（移動中にゾンビと接触）');
                         checkLoseCondition();
                         return;
                     }
-                    
-                    if (zombieDistance < HUMAN_AVOIDANCE_RANGE) {
-                        // 回避力を計算（距離に反比例）
-                        const avoidanceForce = (HUMAN_AVOIDANCE_RANGE - zombieDistance) / HUMAN_AVOIDANCE_RANGE;
-                        avoidanceX -= (zombieDx / zombieDistance) * avoidanceForce;
-                        avoidanceZ -= (zombieDz / zombieDistance) * avoidanceForce;
-                    }
                 });
-
-                // 最終的な移動方向を計算（ゴール方向 + 回避）
-                const finalDx = (goalDx / goalDistance) * 0.7 + avoidanceX * 0.3;
-                const finalDz = (goalDz / goalDistance) * 0.7 + avoidanceZ * 0.3;
-                const finalDistance = Math.sqrt(finalDx * finalDx + finalDz * finalDz);
-
-                if (finalDistance > 0) {
-                    const moveX = (finalDx / finalDistance) * human.speed * deltaTime;
-                    const moveZ = (finalDz / finalDistance) * human.speed * deltaTime;
-                    
-                    human.x += moveX;
-                    human.z += moveZ;
-                    human.mesh.position.set(human.x, 1.0, human.z);
-                    
-                    // 進行方向を記録
-                    human.direction = Math.atan2(finalDz, finalDx);
-                }
             });
 
             // ゾンビの更新
@@ -958,6 +982,12 @@
                 const endX = human.x + Math.cos(human.direction) * lineLength;
                 const endZ = human.z + Math.sin(human.direction) * lineLength;
                 createDebugLine(human.x, human.z, endX, endZ, 0x00aaff);
+                
+                // 現在のウェイポイントへのライン
+                if (human.currentPath.length > 0 && human.pathIndex < human.currentPath.length) {
+                    const targetWaypoint = human.currentPath[human.pathIndex];
+                    createDebugLine(human.x, human.z, targetWaypoint.x, targetWaypoint.z, 0x00ff00);
+                }
             });
             
             // ゾンビの進行方向ライン
@@ -968,6 +998,7 @@
                 const endZ = zombie.z + Math.sin(zombie.direction) * lineLength;
                 
                 let color = 0xff0000; // 基本色（赤）
+                if (zombie.state === 'wandering') color = 0xff4444; // 徘徊中（薄い赤）
                 if (zombie.state === 'rotating') color = 0xffaa00; // 回転中（オレンジ）
                 if (zombie.state === 'chasing') color = 0xff0088; // 追跡中（ピンク）
                 
