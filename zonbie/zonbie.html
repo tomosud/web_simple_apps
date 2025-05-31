@@ -17,6 +17,26 @@
             position: relative;
             width: 100vw;
             height: 100vh;
+            /* スマホ縦画面（9:16）対応 */
+            max-width: 56.25vh; /* 16:9の逆比 */
+            margin: 0 auto;
+        }
+        
+        /* スマホ縦画面用のメディアクエリ */
+        @media (orientation: portrait) and (max-aspect-ratio: 9/16) {
+            #gameContainer {
+                width: 100vw;
+                height: 177.78vw; /* 16:9比率 */
+                max-height: 100vh;
+            }
+        }
+        
+        /* 横画面の場合 */
+        @media (orientation: landscape) {
+            #gameContainer {
+                width: 100vw;
+                height: 100vh;
+            }
         }
         #hud {
             position: absolute;
@@ -786,7 +806,7 @@
 
             gameTime = 0;
             updateHUD();
-            updateDebugInfo();
+            // updateDebugInfo(); // デバッグ表示を無効化
             console.log('ゲーム初期化完了:', humans.length, 'humans,', zombies.length, 'zombies');
         }
 
@@ -805,17 +825,20 @@
             document.getElementById('gameStatus').style.display = 'none';
             initGame();
             console.log('ゲーム開始完了! 人数:', humans.length, 'ゾンビ数:', zombies.length);
-            updateDebugInfo();
+            // updateDebugInfo(); // デバッグ表示を無効化
         }
 
-        // タッチ/クリック処理
+        // タッチ/クリック処理（マルチタッチ2か所まで制限）
         function handleTouch(event) {
             if (gameState !== 'playing') return;
 
             event.preventDefault();
             const touches = event.touches || [event];
+            
+            // マルチタッチを2か所までに制限
+            const maxTouches = Math.min(touches.length, 2);
 
-            for (let i = 0; i < touches.length; i++) {
+            for (let i = 0; i < maxTouches; i++) {
                 const touch = touches[i];
                 const rect = renderer.domElement.getBoundingClientRect();
                 const x = ((touch.clientX - rect.left) / rect.width) * 2 - 1;
@@ -837,7 +860,7 @@
                     point = ray.origin.clone().add(ray.direction.clone().multiplyScalar(t));
                 }
                 
-                console.log('タップ位置:', point.x.toFixed(2), point.z.toFixed(2));
+                console.log('タップ位置:', point.x.toFixed(2), point.z.toFixed(2), `(${i+1}/${maxTouches})`);
                 createRippleEffect(point.x, point.z);
                 affectZombiesInRadius(point.x, point.z, TAP_RADIUS);
             }
@@ -1394,7 +1417,7 @@
             createDangerZones();
 
             updateHUD();
-            updateDebugInfo();
+            // updateDebugInfo(); // デバッグ表示を無効化
         }
 
         // 次のステージへ
@@ -1478,7 +1501,7 @@
             
             // ゲーム開始前でもデバッグ情報を更新
             if (gameState === 'menu') {
-                updateDebugInfo();
+                // updateDebugInfo(); // デバッグ表示を無効化
             }
             
             renderer.render(scene, camera);
@@ -1492,7 +1515,7 @@
             initRenderer();
 
             // 初期デバッグ情報の表示
-            updateDebugInfo();
+            // updateDebugInfo(); // デバッグ表示を無効化
 
             // イベントリスナーの追加
             window.addEventListener('resize', onWindowResize);
