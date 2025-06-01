@@ -640,6 +640,7 @@
         function createRippleEffect(x, z) {
             const effect = {
                 mesh: null,
+                innerMesh: null, // 内側の強度表示用
                 x: x,
                 z: z,
                 radius: 0,
@@ -648,18 +649,33 @@
                 maxLife: 1.0
             };
 
-            // 黄色い輪のみ描画（塗りつぶしなし）
-            const geometry = new THREE.RingGeometry(TAP_RADIUS - 0.3, TAP_RADIUS, 32);
-            const material = new THREE.MeshBasicMaterial({
+            // 外側の輪（影響範囲全体・薄い黄色）
+            const outerRadius = TAP_RADIUS * 2.5;
+            const outerGeometry = new THREE.RingGeometry(outerRadius - 0.2, outerRadius, 32);
+            const outerMaterial = new THREE.MeshBasicMaterial({
                 color: 0xffff00,
+                transparent: true,
+                opacity: 0.3,
+                side: THREE.DoubleSide
+            });
+            effect.mesh = new THREE.Mesh(outerGeometry, outerMaterial);
+            effect.mesh.position.set(x, 0.1, z);
+            effect.mesh.rotation.x = -Math.PI / 2;
+            scene.add(effect.mesh);
+
+            // 内側の輪（最大強度範囲・濃い黄色・半分のサイズ）
+            const innerRadius = TAP_RADIUS * 0.5;
+            const innerGeometry = new THREE.RingGeometry(innerRadius - 0.15, innerRadius, 32);
+            const innerMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffaa00,
                 transparent: true,
                 opacity: 0.8,
                 side: THREE.DoubleSide
             });
-            effect.mesh = new THREE.Mesh(geometry, material);
-            effect.mesh.position.set(x, 0.1, z);
-            effect.mesh.rotation.x = -Math.PI / 2;
-            scene.add(effect.mesh);
+            effect.innerMesh = new THREE.Mesh(innerGeometry, innerMaterial);
+            effect.innerMesh.position.set(x, 0.15, z);
+            effect.innerMesh.rotation.x = -Math.PI / 2;
+            scene.add(effect.innerMesh);
 
             effects.push(effect);
         }
@@ -732,8 +748,8 @@
             zombies.forEach(zombie => {
                 if (zombie.state === 'down') return;
 
-                // 危険ゾーンの細い輪のみ表示（60%サイズ）
-                const visualRadius = HUMAN_AVOIDANCE_RANGE * 0.6;
+                // 危険ゾーンの細い輪のみ表示（30%サイズ）
+                const visualRadius = HUMAN_AVOIDANCE_RANGE * 0.3;
                 const outerRadius = visualRadius;
                 const innerRadius = visualRadius - 0.2; // 細い輪
                 
@@ -753,18 +769,18 @@
             });
         }
 
-        // 高度パスファインディングシステム（仕様書3.1準拠）
+        // 改良版高度パスファインディングシステム
         function calculateCurvePath(startX, startZ, goalX, goalZ) {
-            // 5点構成の曲線経路（スタート → 中間点1 → 中間点2 → 中間点3 → ゴール）
             const totalDistance = Math.sqrt((goalX - startX) ** 2 + (goalZ - startZ) ** 2);
-            const numWaypoints = 5; // 仕様書通り5点構成
+            // より滑らかな経路のため、距離に応じてウェイポイント数を調整
+            const numWaypoints = Math.max(5, Math.min(10, Math.floor(totalDistance / 8)));
             
             const path = [{x: startX, z: startZ}];
             
-            console.log('=== 曲線経路計算開始 ===');
+            console.log('=== 改良版曲線経路計算開始 ===');
             console.log('スタート:', startX.toFixed(1), startZ.toFixed(1));
             console.log('ゴール:', goalX.toFixed(1), goalZ.toFixed(1));
-            console.log('総距離:', totalDistance.toFixed(1));
+            console.log('総距離:', totalDistance.toFixed(1), 'ウェイポイント数:', numWaypoints);
             
             // 直線経路上の中間点を生成
             for (let i = 1; i < numWaypoints; i++) {
@@ -776,58 +792,40 @@
             
             path.push({x: goalX, z: goalZ});
             
-            // 各中間点で48の候補位置を評価（仕様書3.1準拠）
+            // 各中間点で改良された候補位置を評価
             for (let i = 1; i < path.length - 1; i++) {
                 const point = path[i];
                 let bestOffset = {x: 0, z: 0};
                 let minDanger = Infinity;
+                let bestNearestZombieDistance = Infinity;
                 
-                // 48候補点評価システム
-                const candidates = [
-                    {x: 0, z: 0}, // 元の位置
-                    
-                    // 細かい調整用（1単位刻み）
-                    {x: 1, z: 0}, {x: -1, z: 0}, {x: 0, z: 1}, {x: 0, z: -1},
-                    {x: 1, z: 1}, {x: -1, z: 1}, {x: 1, z: -1}, {x: -1, z: -1},
-                    
-                    // 基本的な4方向（1.5単位）
-                    {x: 1.5, z: 0}, {x: -1.5, z: 0}, {x: 0, z: 1.5}, {x: 0, z: -1.5},
-                    {x: 1.5, z: 1.5}, {x: -1.5, z: 1.5}, {x: 1.5, z: -1.5}, {x: -1.5, z: -1.5},
-                    
-                    // 基本的な4方向（2単位）
-                    {x: 2, z: 0}, {x: -2, z: 0}, {x: 0, z: 2}, {x: 0, z: -2},
-                    {x: 2, z: 2}, {x: -2, z: 2}, {x: 2, z: -2}, {x: -2, z: -2},
-                    
-                    // 中距離回避（3単位）
-                    {x: 3, z: 0}, {x: -3, z: 0}, {x: 0, z: 3}, {x: 0, z: -3},
-                    {x: 3, z: 1.5}, {x: -3, z: 1.5}, {x: 1.5, z: 3}, {x: 1.5, z: -3},
-                    {x: 3, z: -1.5}, {x: -3, z: -1.5}, {x: -1.5, z: 3}, {x: -1.5, z: -3},
-                    
-                    // 標準回避（4単位）
-                    {x: 4, z: 0}, {x: -4, z: 0}, {x: 0, z: 4}, {x: 0, z: -4},
-                    {x: 3, z: 3}, {x: -3, z: 3}, {x: 3, z: -3}, {x: -3, z: -3},
-                    
-                    // 大きな回避（5単位）
-                    {x: 5, z: 0}, {x: -5, z: 0}, {x: 0, z: 5}, {x: 0, z: -5},
-                    {x: 4, z: 3}, {x: -4, z: 3}, {x: 4, z: -3}, {x: -4, z: -3},
-                    {x: 3, z: 4}, {x: -3, z: 4}, {x: 3, z: -4}, {x: -3, z: -4},
-                    
-                    // 緊急回避用（6単位）
-                    {x: 6, z: 0}, {x: -6, z: 0}, {x: 0, z: 6}, {x: 0, z: -6}
-                ];
+                // 改良された候補点評価システム（より滑らかな経路）
+                const candidates = [];
+                
+                // 円形に配置された候補点（より滑らかな回避）
+                const maxRadius = 6;
+                for (let radius = 0; radius <= maxRadius; radius += 0.5) {
+                    const steps = radius === 0 ? 1 : Math.max(8, Math.floor(radius * 4));
+                    for (let angle = 0; angle < 2 * Math.PI; angle += (2 * Math.PI) / steps) {
+                        candidates.push({
+                            x: Math.cos(angle) * radius,
+                            z: Math.sin(angle) * radius
+                        });
+                    }
+                }
                 
                 candidates.forEach(offset => {
                     const testX = point.x + offset.x;
                     const testZ = point.z + offset.z;
                     
-                    // 境界チェック（16:9比率対応）
+                    // 境界チェック
                     if (Math.abs(testX) > FIELD_SIZE_X/2 - 2 || Math.abs(testZ) > FIELD_SIZE_Z/2 - 2) {
                         return;
                     }
                     
-                    // ゾンビとの危険度計算（バランス調整版）
+                    // 改良された危険度計算
                     let dangerScore = 0;
-                    let tooClose = false;
+                    let isCurrentlyInDanger = false;
                     let nearestZombieDistance = Infinity;
                     
                     zombies.forEach(zombie => {
@@ -836,60 +834,97 @@
                         const dx = zombie.x - testX;
                         const dz = zombie.z - testZ;
                         const distance = Math.sqrt(dx * dx + dz * dz);
-                        nearestZombieDistance = Math.min(nearestZombieDistance, distance);
                         
-                        // 絶対に近づかない距離（接触距離の2.5倍）
-                        const criticalDistance = CONTACT_DISTANCE * 2.5;
-                        if (distance < criticalDistance) {
-                            tooClose = true;
-                            dangerScore += 500; // 高いペナルティだが極端すぎない
+                        if (distance < nearestZombieDistance) {
+                            nearestZombieDistance = distance;
                         }
-                        // 回避したい距離（より滑らかなペナルティ）
-                        else if (distance < HUMAN_AVOIDANCE_RANGE) {
-                            const normalizedDistance = distance / HUMAN_AVOIDANCE_RANGE;
-                            dangerScore += (1 - normalizedDistance) * 20; // 線形的なペナルティ
+                        
+                        // 改良された危険度計算
+                        const avoidanceRange = HUMAN_AVOIDANCE_RANGE * 0.6; // より狭い回避範囲
+                        
+                        if (distance < CONTACT_DISTANCE) {
+                            isCurrentlyInDanger = true;
+                            dangerScore += 10000; // 即死圏内は絶対回避
+                        } else if (distance < avoidanceRange) {
+                            // 危険ゾーンに対する段階的ペナルティ
+                            const normalizedDistance = distance / avoidanceRange;
+                            const rangeDanger = Math.pow(1 - normalizedDistance, 2) * 200;
+                            dangerScore += rangeDanger;
+                        }
+                        
+                        // ゾンビの移動方向を考慮した予測危険度
+                        if (zombie.state === 'chasing' && distance < avoidanceRange * 1.5) {
+                            const futureX = zombie.x + Math.cos(zombie.direction) * zombie.speed * 2;
+                            const futureZ = zombie.z + Math.sin(zombie.direction) * zombie.speed * 2;
+                            const futureDx = futureX - testX;
+                            const futureDz = futureZ - testZ;
+                            const futureDistance = Math.sqrt(futureDx * futureDx + futureDz * futureDz);
+                            
+                            if (futureDistance < avoidanceRange) {
+                                dangerScore += 50;
+                            }
                         }
                     });
                     
-                    // 危険すぎる場合は候補から除外
-                    if (tooClose) {
-                        return;
+                    // 境界との距離ペナルティ
+                    const edgeDistance = Math.min(
+                        FIELD_SIZE_X/2 - Math.abs(testX),
+                        FIELD_SIZE_Z/2 - Math.abs(testZ)
+                    );
+                    if (edgeDistance < 3) {
+                        dangerScore += (3 - edgeDistance) * 20;
                     }
                     
-                    // ゴールからの距離ペナルティ（動的調整）
-                    const goalDistance = Math.sqrt((goalX - testX) ** 2 + (goalZ - testZ) ** 2);
+                    // ゴールとの距離バイアス（積極性を考慮）
+                    const goalDx = goalX - testX;
+                    const goalDz = goalZ - testZ;
+                    const goalDistance = Math.sqrt(goalDx * goalDx + goalDz * goalDz);
                     
-                    // ゴール優先ロジック（仕様書3.1準拠）
-                    let goalPenalty = 0.1;
-                    if (goalDistance < 8) {
-                        // ゴール8単位以内では直線移動を大幅優遇
-                        goalPenalty = 0.005;
+                    // 現在危険でない場合は、ゴールに近いほど有利
+                    if (!isCurrentlyInDanger) {
+                        dangerScore += goalDistance * 0.05; // 積極的なゴール指向
+                    } else {
+                        dangerScore += goalDistance * 0.2; // 危険時はより慎重
+                    }
+                    
+                    // 経路の滑らかさを考慮
+                    if (i > 1) {
+                        const prevPoint = path[i - 1];
+                        const prevDx = testX - prevPoint.x;
+                        const prevDz = testZ - prevPoint.z;
                         
-                        // 危険度軽減（ゴール接近時は危険度を70%軽減）
-                        dangerScore *= 0.3;
-                        
-                        console.log('ゴール優先ロジック適用: 距離', goalDistance.toFixed(1), '危険度軽減70%');
-                    } else if (goalDistance < 15) {
-                        goalPenalty = 0.02; // 中距離でも直線を優先
+                        if (i < path.length - 2) {
+                            const nextPoint = path[i + 1];
+                            const nextDx = nextPoint.x - testX;
+                            const nextDz = nextPoint.z - testZ;
+                            
+                            // 角度の急激な変化にペナルティ
+                            const prevAngle = Math.atan2(prevDz, prevDx);
+                            const nextAngle = Math.atan2(nextDz, nextDx);
+                            let angleDiff = Math.abs(nextAngle - prevAngle);
+                            if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+                            
+                            dangerScore += angleDiff * 5; // 滑らかさボーナス
+                        }
                     }
                     
-                    // 最も近いゾンビが遠い場合もペナルティ軽減
-                    if (nearestZombieDistance > HUMAN_AVOIDANCE_RANGE * 2) {
-                        goalPenalty *= 0.3; // 安全な場合は直線を強く優先
-                    }
-                    
-                    dangerScore += goalDistance * goalPenalty;
-                    
-                    if (dangerScore < minDanger) {
+                    // 最適位置を更新
+                    if (!isCurrentlyInDanger && dangerScore < minDanger) {
                         minDanger = dangerScore;
                         bestOffset = offset;
+                        bestNearestZombieDistance = nearestZombieDistance;
                     }
                 });
                 
+                // 最適位置に更新
                 point.x += bestOffset.x;
                 point.z += bestOffset.z;
+                
+                console.log(`ウェイポイント${i}: (${point.x.toFixed(1)}, ${point.z.toFixed(1)}) 危険度: ${minDanger.toFixed(1)} 最近距離: ${bestNearestZombieDistance.toFixed(1)}`);
             }
             
+            console.log('=== 改良版曲線経路計算完了 ===');
+            console.log('最終経路:', path.map((p, i) => `${i}: (${p.x.toFixed(1)}, ${p.z.toFixed(1)})`).join(' → '));
             return path;
         }
 
@@ -1135,10 +1170,12 @@
                           ['wandering', 'rotating', 'chasing'].includes(entity.state)
             },
             'push': {
-                force: 5.0,
-                duration: 0.5,
+                maxForce: 3.0, // 最大押し出し距離（内側範囲）
+                minForce: 0.0,  // 最小押し出し距離（外側範囲の淵）
+                downDuration: ZOMBIE_DOWN_TIME, // 転倒時間
                 visualEffect: 'ripple',
-                canAffect: (entity) => entity.type === 'zombie'
+                canAffect: (entity) => entity.type === 'zombie' &&
+                          ['wandering', 'rotating', 'chasing'].includes(entity.state)
             }
         };
 
@@ -1163,17 +1200,86 @@
                     console.log(`ゾンビ${entity.id}: ${entity.state} → down (タップ効果)`);
                     break;
                 case 'push':
-                    // 将来のはじき動作用（現在は未実装）
-                    console.log('Push effect applied to entity', entity.id);
+                    // タップ位置からゾンビへの方向に押し出す（距離に応じた力）
+                    const dx = entity.x - x; // タップ位置からゾンビへのベクトル
+                    const dz = entity.z - z;
+                    const tapDistance = Math.sqrt(dx * dx + dz * dz);
+                    
+                    if (tapDistance > 0.1) {
+                        // 改良された距離に応じた押し出し力計算
+                        const innerRadius = TAP_RADIUS * 0.5; // 内側範囲（最大強度）
+                        const outerRadius = TAP_RADIUS * 2.5; // 外側範囲（強度0）
+                        
+                        let pushForce;
+                        if (tapDistance <= innerRadius) {
+                            // 内側範囲では最大強度（3.0）
+                            pushForce = effect.maxForce;
+                        } else if (tapDistance <= outerRadius) {
+                            // 内側から外側へリニア減衰（3.0 → 0.0）
+                            const fadeRange = outerRadius - innerRadius;
+                            const fadeDistance = tapDistance - innerRadius;
+                            const fadeRatio = fadeDistance / fadeRange;
+                            pushForce = effect.maxForce * (1 - fadeRatio);
+                        } else {
+                            // 範囲外は影響なし
+                            pushForce = 0;
+                        }
+                        
+                        // 押し出し力が0以下の場合は効果なし
+                        if (pushForce <= 0) {
+                            console.log(`ゾンビ${entity.id}は範囲外のため押し出し効果なし (距離: ${tapDistance.toFixed(1)})`);
+                            return true; // 効果適用済みとして扱う
+                        }
+                        
+                        // 正規化された方向ベクトル
+                        const pushX = (dx / tapDistance) * pushForce;
+                        const pushZ = (dz / tapDistance) * pushForce;
+                        
+                        // 新しい位置を計算（境界チェック付き）
+                        const newX = entity.x + pushX;
+                        const newZ = entity.z + pushZ;
+                        
+                        // 境界内であれば移動
+                        if (Math.abs(newX) < FIELD_SIZE_X/2 - 2 && Math.abs(newZ) < FIELD_SIZE_Z/2 - 2) {
+                            entity.x = newX;
+                            entity.z = newZ;
+                            entity.position.x = entity.x;
+                            entity.position.z = entity.z;
+                            entity.mesh.position.set(entity.x, 1.0, entity.z);
+                            
+                            // 転倒状態にする
+                            entity.state = 'down';
+                            entity.timers.downTimer = effect.downDuration;
+                            entity.mesh.rotation.z = Math.PI / 4; // 45度傾ける
+                            
+                            // 人を探すためのランダム方向（復帰時用）
+                            entity.movement.direction = Math.random() * Math.PI * 2;
+                            entity.timers.wanderTimer = 0;
+                            
+                            // 後方互換性
+                            entity.downTimer = entity.timers.downTimer;
+                            entity.direction = entity.movement.direction;
+                            entity.wanderTimer = entity.timers.wanderTimer;
+                            
+                            console.log(`ゾンビ${entity.id}をタップ位置(${x.toFixed(1)}, ${z.toFixed(1)})から押し出し: (${entity.x.toFixed(1)}, ${entity.z.toFixed(1)}) 力: ${pushForce.toFixed(1)} 距離: ${tapDistance.toFixed(1)}`);
+                            console.log(`=== AI状態変化 ===`);
+                            console.log(`ゾンビ${entity.id}: ${entity.state} → down (タップ押し出し)`);
+                        } else {
+                            console.log(`ゾンビ${entity.id}の押し出し先が境界外のため移動せず`);
+                        }
+                    }
                     break;
             }
             return true;
         }
 
-        // 範囲内のエンティティに影響を与える
-        function affectEntitiesInRadius(x, z, radius, effectType = 'knockdown') {
+        // 範囲内のエンティティに影響を与える（拡大範囲対応）
+        function affectEntitiesInRadius(x, z, radius, effectType = 'push') {
             // 後方互換性のため、配列も更新
             updateCompatibilityArrays();
+            
+            // pushエフェクトの場合は範囲を2.5倍に拡大
+            const effectiveRadius = effectType === 'push' ? radius * 2.5 : radius;
             
             let affectedCount = 0;
             entities.forEach(entity => {
@@ -1181,20 +1287,20 @@
                 const dz = entity.position.z - z;
                 const distance = Math.sqrt(dx * dx + dz * dz);
                 
-                if (distance <= radius) {
+                if (distance <= effectiveRadius) {
                     if (applyTapEffect(entity, effectType, x, z)) {
                         affectedCount++;
                     }
                 }
             });
             
-            console.log(`${effectType} effect applied to ${affectedCount} entities`);
+            console.log(`${effectType} effect applied to ${affectedCount} entities (範囲: ${effectiveRadius.toFixed(1)})`);
             return affectedCount;
         }
 
         // 後方互換性のための関数
         function affectZombiesInRadius(x, z, radius) {
-            return affectEntitiesInRadius(x, z, radius, 'knockdown');
+            return affectEntitiesInRadius(x, z, radius, 'push');
         }
 
         // 統一衝突判定システム
@@ -1444,23 +1550,48 @@
                             return; // 次のフレームで処理
                         }
                         
-                        // 移動前に安全性をチェック
+                        // 改良された安全性チェック
                         let safeToMove = true;
+                        let riskLevel = 0;
                         const moveDistance = human.speed * deltaTime;
                         const moveX = (dx / distance) * moveDistance;
                         const moveZ = (dz / distance) * moveDistance;
                         const plannedX = human.x + moveX;
                         const plannedZ = human.z + moveZ;
                         
+                        // ゴールまでの距離を考慮した積極性調整
+                        const goalDistance = Math.sqrt((human.targetX - human.x) ** 2 + (human.targetZ - human.z) ** 2);
+                        const isNearGoal = goalDistance < 15;
+                        const isVeryNearGoal = goalDistance < 8;
+                        
                         zombies.forEach(zombie => {
                             if (zombie.state === 'down') return;
                             const checkDx = zombie.x - plannedX;
                             const checkDz = zombie.z - plannedZ;
                             const checkDistance = Math.sqrt(checkDx * checkDx + checkDz * checkDz);
-                            if (checkDistance < CONTACT_DISTANCE * 2) {
-                                safeToMove = false;
+                            
+                            // 危険度に応じた段階的判定
+                            if (checkDistance < CONTACT_DISTANCE * 1.5) {
+                                safeToMove = false; // 絶対に危険
+                                riskLevel = 3;
+                            } else if (checkDistance < CONTACT_DISTANCE * 2.5) {
+                                if (!isVeryNearGoal) { // ゴール直前でなければ停止
+                                    safeToMove = false;
+                                    riskLevel = 2;
+                                }
+                            } else if (checkDistance < CONTACT_DISTANCE * 4) {
+                                if (!isNearGoal) { // ゴール近くでなければ慎重
+                                    safeToMove = false;
+                                    riskLevel = 1;
+                                }
                             }
                         });
+                        
+                        // ゴール直前では積極的に進む
+                        if (isVeryNearGoal && riskLevel <= 2) {
+                            safeToMove = true;
+                            console.log('ゴール直前 - 積極的移動');
+                        }
                         
                         if (safeToMove) {
                             // 次のウェイポイントに近づいたら次へ
@@ -1663,14 +1794,24 @@
                 }
             });
 
-            // エフェクトの更新（アクティブカウンター管理）
+            // エフェクトの更新（アクティブカウンター管理・二重輪対応）
             effects = effects.filter(effect => {
                 effect.life -= deltaTime;
                 const alpha = effect.life / effect.maxLife;
-                effect.mesh.material.opacity = alpha * 0.8;
+                
+                // 外側の輪の透明度更新
+                effect.mesh.material.opacity = alpha * 0.3;
+                
+                // 内側の輪の透明度更新
+                if (effect.innerMesh) {
+                    effect.innerMesh.material.opacity = alpha * 0.8;
+                }
                 
                 if (effect.life <= 0) {
                     scene.remove(effect.mesh);
+                    if (effect.innerMesh) {
+                        scene.remove(effect.innerMesh);
+                    }
                     activeTapEffects = Math.max(0, activeTapEffects - 1); // カウンター減少
                     return false;
                 }
