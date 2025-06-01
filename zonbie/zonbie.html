@@ -108,6 +108,20 @@
         let gameTime = 0;
         let gameRunning = false;
 
+        // カメラ操作関連
+        let cameraControls = {
+            isDragging: false,
+            isZooming: false,
+            lastMouseX: 0,
+            lastMouseY: 0,
+            lastTouchDistance: 0,
+            minZoom: 20,
+            maxZoom: 80,
+            currentZoom: 45,
+            dragSensitivity: 0.0025,
+            zoomSensitivity: 2
+        };
+
         // ゲームエンティティ
         let entities = []; // 統一エンティティシステム
         let effects = [];
@@ -137,14 +151,72 @@
         const ENTRANCE_SIZE = 3.0; // 入口のサイズ
         const EXIT_SIZE = 3.0; // 出口のサイズ
 
-        // 床下カメラの初期化
+        // 床下カメラの初期化（部屋全体が見えるよう調整）
         function initCamera() {
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            // 床下から見上げる視点（Y軸を反転）
-            camera.position.set(0, -50, 0); // カメラをさらに遠くに移動して壁全体を見えるように
-            camera.lookAt(0, 0, 0);
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            // 床下から見上げる視点（部屋全体が見えるよう距離を調整）
+            cameraControls.currentZoom = 45; // 初期ズーム値
+            updateCameraPosition();
             camera.up.set(0, 0, 1); // Z軸を上方向に設定
-            console.log('カメラ初期化完了:', camera.position);
+            console.log('カメラ初期化完了 (床下視点・操作対応):', camera.position);
+        }
+
+        // カメラ操作関数
+        function updateCameraPosition() {
+            camera.position.y = -cameraControls.currentZoom;
+            camera.lookAt(camera.position.x, 0, camera.position.z);
+        }
+
+        function handleCameraZoom(delta, mouseX = null, mouseY = null) {
+            const oldZoom = cameraControls.currentZoom;
+            cameraControls.currentZoom += delta * cameraControls.zoomSensitivity;
+            cameraControls.currentZoom = Math.max(cameraControls.minZoom,
+                Math.min(cameraControls.maxZoom, cameraControls.currentZoom));
+            
+            // マウス位置に向かってズーム
+            if (mouseX !== null && mouseY !== null) {
+                const rect = renderer.domElement.getBoundingClientRect();
+                const x = ((mouseX - rect.left) / rect.width) * 2 - 1;
+                const y = -((mouseY - rect.top) / rect.height) * 2 + 1;
+                
+                // マウス位置のワールド座標を計算
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+                const ray = raycaster.ray;
+                const t = -ray.origin.y / ray.direction.y;
+                const worldPoint = ray.origin.clone().add(ray.direction.clone().multiplyScalar(t));
+                
+                // ズーム比率に応じてカメラ位置を調整
+                const zoomRatio = (oldZoom - cameraControls.currentZoom) / oldZoom * 0.3;
+                const targetX = worldPoint.x * zoomRatio;
+                const targetZ = worldPoint.z * zoomRatio;
+                
+                camera.position.x += targetX;
+                camera.position.z += targetZ;
+                
+                // 移動範囲制限
+                const maxMove = FIELD_SIZE_X * 0.3;
+                camera.position.x = Math.max(-maxMove, Math.min(maxMove, camera.position.x));
+                camera.position.z = Math.max(-FIELD_SIZE_Z * 0.3, Math.min(FIELD_SIZE_Z * 0.3, camera.position.z));
+            }
+            
+            updateCameraPosition();
+        }
+
+        function handleCameraDrag(deltaX, deltaY) {
+            const currentPos = camera.position.clone();
+            const dragX = -deltaX * cameraControls.dragSensitivity * cameraControls.currentZoom; // 左右反転
+            const dragZ = deltaY * cameraControls.dragSensitivity * cameraControls.currentZoom;
+            
+            camera.position.x = currentPos.x + dragX;
+            camera.position.z = currentPos.z + dragZ;
+            
+            // カメラの移動範囲を制限
+            const maxMove = FIELD_SIZE_X * 0.3;
+            camera.position.x = Math.max(-maxMove, Math.min(maxMove, camera.position.x));
+            camera.position.z = Math.max(-FIELD_SIZE_Z * 0.3, Math.min(FIELD_SIZE_Z * 0.3, camera.position.z));
+            
+            camera.lookAt(camera.position.x, 0, camera.position.z);
         }
 
         // シーンの初期化
@@ -178,6 +250,7 @@
             });
             const floor = new THREE.Mesh(floorGeometry, floorMaterial);
             floor.rotation.x = -Math.PI / 2;
+            floor.position.y = 0.2; // 床面表示を仕様通り0.2の高さに設定
             floor.name = 'ground';
             scene.add(floor);
 
@@ -256,8 +329,8 @@
             entrance.type = 'entrance';
             entrances.push(entrance);
             
-            // 入口エリアの視覚化（床面）
-            const entranceGeometry = new THREE.CircleGeometry(ENTRANCE_SIZE, 16);
+            // 入口エリアの視覚化（輪のみ）
+            const entranceGeometry = new THREE.RingGeometry(ENTRANCE_SIZE - 0.2, ENTRANCE_SIZE, 32);
             const entranceMaterial = new THREE.MeshBasicMaterial({
                 color: 0x0099ff,
                 transparent: true,
@@ -298,8 +371,8 @@
                     exits.push(exit);
                     availableWalls.splice(wallIndex, 1); // 使用済み壁を削除
                     
-                    // 出口エリアの視覚化（床面）
-                    const exitGeometry = new THREE.CircleGeometry(EXIT_SIZE, 16);
+                    // 出口エリアの視覚化（輪のみ）
+                    const exitGeometry = new THREE.RingGeometry(EXIT_SIZE - 0.2, EXIT_SIZE, 32);
                     const exitMaterial = new THREE.MeshBasicMaterial({
                         color: 0x00ff00,
                         transparent: true,
@@ -391,33 +464,33 @@
             return nextEntityId++;
         }
 
-        // エンティティ統一システム
+        // エンティティ統一システム（仕様書12.1準拠）
         function createEntity(type, x, z, options = {}) {
             const entity = {
                 id: generateEntityId(),
                 type: type, // 'human' or 'zombie'
-                state: type === 'human' ? 'human' : 'wandering',
-                mesh: createEntityMesh(type === 'human' ? 0x0066ff : 0xff0000),
-                position: { x: x, z: z },
-                movement: {
+                state: type === 'human' ? 'seeking' : 'wandering',
+                position: { x: x, z: z }, // 統一座標
+                movement: { // 移動情報
                     speed: type === 'human' ? HUMAN_SPEED : ZOMBIE_SPEED,
                     direction: options.direction || (type === 'zombie' ? Math.random() * Math.PI * 2 : 0),
                     path: [],
                     pathIndex: 0
                 },
-                ai: {
+                ai: { // AI情報
                     target: null,
                     detectionRange: type === 'zombie' ? ZOMBIE_DETECTION_RANGE : 0,
                     behavior: type === 'human' ? 'seek' : 'wander'
                 },
-                timers: {
+                timers: { // タイマー情報
                     stateTimer: 0,
                     pathUpdateTimer: 0,
                     contactTimer: 0,
                     wanderTimer: 0,
                     downTimer: 0
                 },
-                // 後方互換性のためのプロパティ
+                // メッシュと後方互換性プロパティ
+                mesh: createEntityMesh(type === 'human' ? 0x0066ff : 0xff0000),
                 alive: type === 'human',
                 ...options
             };
@@ -457,10 +530,48 @@
             return getEntitiesByType('zombie');
         }
 
-        // 後方互換性の更新
+        // 後方互換性の更新（エンティティ統一システム12.2準拠）
         function updateCompatibilityArrays() {
             humans = getHumans();
             zombies = getZombies();
+            
+            // 個別プロパティの双方向同期
+            entities.forEach(entity => {
+                // 統一座標から個別プロパティへ同期
+                entity.x = entity.position.x;
+                entity.z = entity.position.z;
+                // 個別プロパティから統一座標へ逆同期
+                entity.position.x = entity.x;
+                entity.position.z = entity.z;
+                
+                entity.speed = entity.movement.speed;
+                entity.direction = entity.movement.direction;
+                // 逆同期
+                entity.movement.speed = entity.speed;
+                entity.movement.direction = entity.direction;
+                
+                // タイマー双方向同期
+                if (entity.type === 'zombie') {
+                    entity.downTimer = entity.timers.downTimer;
+                    entity.wanderTimer = entity.timers.wanderTimer;
+                    entity.contactTimer = entity.timers.contactTimer;
+                    // 逆同期
+                    entity.timers.downTimer = entity.downTimer;
+                    entity.timers.wanderTimer = entity.wanderTimer;
+                    entity.timers.contactTimer = entity.contactTimer;
+                }
+                if (entity.type === 'human') {
+                    entity.currentPath = entity.movement.path;
+                    entity.pathIndex = entity.movement.pathIndex;
+                    entity.pathUpdateTimer = entity.timers.pathUpdateTimer;
+                    entity.contactTimer = entity.timers.contactTimer;
+                    // 逆同期
+                    entity.movement.path = entity.currentPath;
+                    entity.movement.pathIndex = entity.pathIndex;
+                    entity.timers.pathUpdateTimer = entity.pathUpdateTimer;
+                    entity.timers.contactTimer = entity.contactTimer;
+                }
+            });
         }
 
         // 球体メッシュの作成
@@ -482,12 +593,29 @@
             entity.z = entity.position.z;
             entity.speed = entity.movement.speed;
             entity.direction = entity.movement.direction;
-            entity.currentPath = entity.movement.path;
+            entity.currentPath = entity.movement.path || [];
             entity.pathIndex = entity.movement.pathIndex;
             entity.contactTimer = entity.timers.contactTimer;
             entity.pathUpdateTimer = entity.timers.pathUpdateTimer;
             
+            // 初期経路を即座に計算
+            if (entity.targetX !== undefined && entity.targetZ !== undefined) {
+                entity.currentPath = calculateCurvePath(entity.x, entity.z, entity.targetX, entity.targetZ);
+                entity.pathIndex = 0;
+                entity.movement.path = entity.currentPath;
+                entity.movement.pathIndex = entity.pathIndex;
+                
+                // 初期経路ラインを表示
+                clearPathLines();
+                createPathLine(entity.currentPath, 0x00ff00);
+                createDangerZones();
+                
+                console.log('初期経路計算完了:', entity.currentPath.length, 'ポイント');
+                console.log('初期経路ライン表示完了');
+            }
+            
             console.log('人を作成:', x, z, '→ 出口:', entity.targetX, entity.targetZ);
+            console.log('人の初期状態:', entity.state, 'alive:', entity.alive);
             return entity;
         }
 
@@ -508,7 +636,7 @@
             return entity;
         }
 
-        // エフェクトの作成（タップ時の波紋）
+        // エフェクトの作成（タップ時の波紋・輪のみ）
         function createRippleEffect(x, z) {
             const effect = {
                 mesh: null,
@@ -520,12 +648,12 @@
                 maxLife: 1.0
             };
 
-            // 半透明の円から黄色い輪に変更
-            const geometry = new THREE.RingGeometry(0.1, TAP_RADIUS, 32);
+            // 黄色い輪のみ描画（塗りつぶしなし）
+            const geometry = new THREE.RingGeometry(TAP_RADIUS - 0.3, TAP_RADIUS, 32);
             const material = new THREE.MeshBasicMaterial({
                 color: 0xffff00,
                 transparent: true,
-                opacity: 0.6,
+                opacity: 0.8,
                 side: THREE.DoubleSide
             });
             effect.mesh = new THREE.Mesh(geometry, material);
@@ -586,7 +714,7 @@
             pathLines.push(line);
         }
 
-        // ゾンビ危険ゾーンの表示
+        // ゾンビ危険ゾーンの表示（輪のみ描画）
         function createDangerZones() {
             // 既存の危険ゾーンをクリア
             const toRemove = [];
@@ -600,21 +728,21 @@
             // 後方互換性のため配列を更新
             updateCompatibilityArrays();
 
-            // 各ゾンビの危険ゾーンを表示
+            // 各ゾンビの危険ゾーンを表示（輪のみ）
             zombies.forEach(zombie => {
                 if (zombie.state === 'down') return;
 
-                // 危険ゾーンの細い円のみ表示
-                const visualRadius = (HUMAN_AVOIDANCE_RANGE / 3) * 0.6; // 60%に縮小
+                // 危険ゾーンの細い輪のみ表示（60%サイズ）
+                const visualRadius = HUMAN_AVOIDANCE_RANGE * 0.6;
                 const outerRadius = visualRadius;
-                const innerRadius = visualRadius - 0.1; // 非常に細いリング
+                const innerRadius = visualRadius - 0.2; // 細い輪
                 
-                // 細い円のみ（塗りつぶしなし）
+                // 輪のみ描画（塗りつぶしなし）
                 const geometry = new THREE.RingGeometry(innerRadius, outerRadius, 32);
                 const material = new THREE.MeshBasicMaterial({
                     color: 0xff0000,
                     transparent: true,
-                    opacity: 0.8,
+                    opacity: 0.6,
                     side: THREE.DoubleSide
                 });
                 const dangerRing = new THREE.Mesh(geometry, material);
@@ -625,13 +753,18 @@
             });
         }
 
-        // スムーズパス計算（改善版）
+        // 高度パスファインディングシステム（仕様書3.1準拠）
         function calculateCurvePath(startX, startZ, goalX, goalZ) {
-            // ゴールまでの距離で動的にウェイポイント数を決定
+            // 5点構成の曲線経路（スタート → 中間点1 → 中間点2 → 中間点3 → ゴール）
             const totalDistance = Math.sqrt((goalX - startX) ** 2 + (goalZ - startZ) ** 2);
-            const numWaypoints = Math.max(3, Math.min(5, Math.floor(totalDistance / 8))); // 距離に応じて調整
+            const numWaypoints = 5; // 仕様書通り5点構成
             
             const path = [{x: startX, z: startZ}];
+            
+            console.log('=== 曲線経路計算開始 ===');
+            console.log('スタート:', startX.toFixed(1), startZ.toFixed(1));
+            console.log('ゴール:', goalX.toFixed(1), goalZ.toFixed(1));
+            console.log('総距離:', totalDistance.toFixed(1));
             
             // 直線経路上の中間点を生成
             for (let i = 1; i < numWaypoints; i++) {
@@ -643,13 +776,13 @@
             
             path.push({x: goalX, z: goalZ});
             
-            // 各中間点をゾンビ回避のために調整
+            // 各中間点で48の候補位置を評価（仕様書3.1準拠）
             for (let i = 1; i < path.length - 1; i++) {
                 const point = path[i];
                 let bestOffset = {x: 0, z: 0};
                 let minDanger = Infinity;
                 
-                // 細かい回避用の候補点（約2倍に増加）
+                // 48候補点評価システム
                 const candidates = [
                     {x: 0, z: 0}, // 元の位置
                     
@@ -726,21 +859,16 @@
                     // ゴールからの距離ペナルティ（動的調整）
                     const goalDistance = Math.sqrt((goalX - testX) ** 2 + (goalZ - testZ) ** 2);
                     
-                    // ゴール近くでの特別処理
+                    // ゴール優先ロジック（仕様書3.1準拠）
                     let goalPenalty = 0.1;
                     if (goalDistance < 8) {
-                        // ゴール至近距離では大幅に直線優先
+                        // ゴール8単位以内では直線移動を大幅優遇
                         goalPenalty = 0.005;
                         
-                        // ゴールに向かう直線上かチェック
-                        const directPath = Math.sqrt((goalX - point.x) ** 2 + (goalZ - point.z) ** 2);
-                        const currentToGoal = Math.sqrt((goalX - point.x) ** 2 + (goalZ - point.z) ** 2);
-                        const testToGoal = Math.sqrt((goalX - testX) ** 2 + (goalZ - testZ) ** 2);
+                        // 危険度軽減（ゴール接近時は危険度を70%軽減）
+                        dangerScore *= 0.3;
                         
-                        // ゴールに近づく移動を大幅優遇
-                        if (testToGoal < currentToGoal) {
-                            dangerScore *= 0.3; // ゴールに近づく場合は危険度を大幅減少
-                        }
+                        console.log('ゴール優先ロジック適用: 距離', goalDistance.toFixed(1), '危険度軽減70%');
                     } else if (goalDistance < 15) {
                         goalPenalty = 0.02; // 中距離でも直線を優先
                     }
@@ -816,8 +944,11 @@
 
             gameTime = 0;
             updateHUD();
-            // updateDebugInfo(); // デバッグ表示を無効化
-            console.log('ゲーム初期化完了:', humans.length, 'humans,', zombies.length, 'zombies');
+            // デバッグ情報はコンソールログのみ（モバイル最適化）
+            console.log('=== ゲーム初期化完了 ===');
+            console.log('人数:', humans.length, 'ゾンビ数:', zombies.length);
+            console.log('出口数:', exits.length);
+            console.log('ステージ:', currentStage);
         }
 
         // HUDの更新
@@ -833,19 +964,130 @@
             gameRunning = true;
             document.getElementById('gameStatus').style.display = 'none';
             initGame();
-            console.log('ゲーム開始完了! 人数:', humans.length, 'ゾンビ数:', zombies.length);
-            // updateDebugInfo(); // デバッグ表示を無効化
+            console.log('=== ゲーム開始完了 ===');
+            console.log('人数:', humans.length, 'ゾンビ数:', zombies.length);
+            console.log('フィールドサイズ:', FIELD_SIZE_X, 'x', FIELD_SIZE_Z);
         }
 
-        // タッチ/クリック処理（マルチタッチ2か所まで制限）
+        // マウスイベントハンドラー
+        function handleMouseDown(event) {
+            if (event.button === 1) { // 中クリック
+                event.preventDefault();
+                cameraControls.isDragging = true;
+                cameraControls.lastMouseX = event.clientX;
+                cameraControls.lastMouseY = event.clientY;
+            } else if (event.button === 0 && gameState === 'playing') { // 左クリック
+                handleGameTouch(event);
+            }
+        }
+
+        function handleMouseMove(event) {
+            if (cameraControls.isDragging) {
+                event.preventDefault();
+                const deltaX = event.clientX - cameraControls.lastMouseX;
+                const deltaY = event.clientY - cameraControls.lastMouseY;
+                handleCameraDrag(deltaX, deltaY);
+                cameraControls.lastMouseX = event.clientX;
+                cameraControls.lastMouseY = event.clientY;
+            }
+        }
+
+        function handleMouseUp(event) {
+            if (event.button === 1) { // 中クリック
+                cameraControls.isDragging = false;
+            }
+        }
+
+        function handleWheel(event) {
+            event.preventDefault();
+            const delta = event.deltaY > 0 ? 1 : -1;
+            handleCameraZoom(delta, event.clientX, event.clientY);
+        }
+
+        // タッチ/クリック処理（シングルタッチ・同時2個まで）
         function handleTouch(event) {
+            const touches = event.touches;
+            
+            if (touches.length === 2) {
+                // ピンチズームまたは二本指ドラッグ
+                event.preventDefault();
+                handleTwoFingerGesture(event);
+            } else if (touches.length === 1 && gameState === 'playing') {
+                // シングルタッチでのゲーム操作
+                handleGameTouch(event);
+            }
+        }
+
+        // 二本指ジェスチャー処理（感度調整済み）
+        function handleTwoFingerGesture(event) {
+            const touches = event.touches;
+            if (touches.length !== 2) return;
+
+            const touch1 = touches[0];
+            const touch2 = touches[1];
+            const distance = Math.sqrt(
+                Math.pow(touch2.clientX - touch1.clientX, 2) +
+                Math.pow(touch2.clientY - touch1.clientY, 2)
+            );
+
+            const centerX = (touch1.clientX + touch2.clientX) / 2;
+            const centerY = (touch1.clientY + touch2.clientY) / 2;
+
+            if (cameraControls.isZooming) {
+                // ピンチズーム（感度を半分に調整）
+                const distanceDelta = distance - cameraControls.lastTouchDistance;
+                if (Math.abs(distanceDelta) > 5) { // 最小変化量を設定
+                    const delta = distanceDelta > 0 ? -0.5 : 0.5; // 感度を半分に
+                    handleCameraZoom(delta, centerX, centerY);
+                }
+                
+                // 二本指ドラッグ（ピンチ中でも可能）
+                if (cameraControls.isDragging) {
+                    const deltaX = (centerX - cameraControls.lastMouseX) * 0.5; // 感度を半分に
+                    const deltaY = (centerY - cameraControls.lastMouseY) * 0.5;
+                    handleCameraDrag(-deltaX, deltaY); // 左右反転適用
+                    cameraControls.lastMouseX = centerX;
+                    cameraControls.lastMouseY = centerY;
+                }
+            } else {
+                // 二本指ドラッグ開始
+                cameraControls.isDragging = true;
+                cameraControls.lastMouseX = centerX;
+                cameraControls.lastMouseY = centerY;
+            }
+
+            cameraControls.isZooming = true;
+            cameraControls.lastTouchDistance = distance;
+        }
+
+        function handleTouchEnd(event) {
+            if (event.touches.length < 2) {
+                cameraControls.isZooming = false;
+                cameraControls.isDragging = false;
+            }
+        }
+
+        // アクティブなタップ効果カウンター
+        let activeTapEffects = 0;
+        const maxActiveTaps = 2;
+
+        // ゲーム用タッチ処理（シングルタッチ・同時2個まで有効）
+        function handleGameTouch(event) {
             if (gameState !== 'playing') return;
 
             event.preventDefault();
             const touches = event.touches || [event];
             
-            // マルチタッチを2か所までに制限
-            const maxTouches = Math.min(touches.length, 2);
+            // アクティブなタップ効果数をチェック
+            const currentActiveEffects = effects.filter(effect => effect.life > 0.5).length; // 0.5秒以内のエフェクト
+            
+            // 最大2個まで処理、アクティブ効果数も考慮
+            const maxTouches = Math.min(touches.length, maxActiveTaps - currentActiveEffects);
+
+            if (maxTouches <= 0) {
+                console.log('タップ効果制限: 同時2個まで');
+                return;
+            }
 
             for (let i = 0; i < maxTouches; i++) {
                 const touch = touches[i];
@@ -870,8 +1112,17 @@
                 }
                 
                 console.log('タップ位置:', point.x.toFixed(2), point.z.toFixed(2), `(${i+1}/${maxTouches})`);
+                
+                // 常にタップエフェクトを実行（ゾンビの有無に関係なく）
                 createRippleEffect(point.x, point.z);
-                affectZombiesInRadius(point.x, point.z, TAP_RADIUS);
+                const affected = affectZombiesInRadius(point.x, point.z, TAP_RADIUS);
+                activeTapEffects++;
+                
+                if (affected > 0) {
+                    console.log(`タップ効果: ${affected}匹のゾンビに影響`);
+                } else {
+                    console.log('タップ効果: ゾンビが範囲内にいませんが、エフェクトは表示');
+                }
             }
         }
 
@@ -907,6 +1158,9 @@
                     entity.downTimer = entity.timers.downTimer;
                     entity.direction = entity.movement.direction;
                     entity.wanderTimer = entity.timers.wanderTimer;
+                    
+                    console.log(`=== AI状態変化 ===`);
+                    console.log(`ゾンビ${entity.id}: ${entity.state} → down (タップ効果)`);
                     break;
                 case 'push':
                     // 将来のはじき動作用（現在は未実装）
@@ -1048,36 +1302,31 @@
 
             gameTime += deltaTime;
             
-            // エンティティ位置同期（後方互換性のため）
-            entities.forEach(entity => {
-                // 統一プロパティから個別プロパティへ同期
-                entity.x = entity.position.x;
-                entity.z = entity.position.z;
-                entity.speed = entity.movement.speed;
-                entity.direction = entity.movement.direction;
-                
-                // タイマー同期
-                if (entity.type === 'zombie') {
-                    entity.downTimer = entity.timers.downTimer;
-                    entity.wanderTimer = entity.timers.wanderTimer;
-                    entity.contactTimer = entity.timers.contactTimer;
-                }
-                if (entity.type === 'human') {
-                    entity.movement.path = entity.currentPath;
-                    entity.movement.pathIndex = entity.pathIndex;
-                    entity.movement.pathUpdateTimer = entity.timers.pathUpdateTimer;
-                    entity.timers.contactTimer = entity.timers.contactTimer;
-                }
-            });
-            
-            // 後方互換性配列を更新
+            // エンティティ統一システム同期（12.2 後方互換性保証）
             updateCompatibilityArrays();
             
-            console.log('ゲーム更新中:', gameTime.toFixed(1), 'deltaTime:', deltaTime.toFixed(3));
+            // デバッグ情報はコンソールログのみ（詳細ログは1秒ごと）
+            if (Math.floor(gameTime) % 1 === 0 && Math.floor(gameTime) !== Math.floor(gameTime - deltaTime)) {
+                console.log('=== ゲーム状況 ===');
+                console.log('時間:', gameTime.toFixed(1), 'ステージ:', currentStage);
+                console.log('生存人数:', humans.filter(h => h.alive).length, '/', humans.length);
+                console.log('ゾンビ状態:', zombies.map((z, i) => `${i+1}:${z.state}`).join(', '));
+            }
 
             // 人の更新
-            humans.forEach(human => {
-                if (!human.alive) return;
+            humans.forEach((human, index) => {
+                if (!human.alive) {
+                    console.log(`人${index + 1}は死亡済み`);
+                    return;
+                }
+
+                // デバッグログ（1秒ごと）
+                if (Math.floor(gameTime) % 1 === 0 && Math.floor(gameTime) !== Math.floor(gameTime - deltaTime)) {
+                    console.log(`=== 人${index + 1}状況 ===`);
+                    console.log(`位置: (${human.x.toFixed(1)}, ${human.z.toFixed(1)})`);
+                    console.log(`状態: ${human.state}, 生存: ${human.alive}`);
+                    console.log(`経路: ${human.currentPath ? human.currentPath.length : 0}ポイント, インデックス: ${human.pathIndex}`);
+                }
 
                 // 最も近い出口を確認（動的に変更）
                 const nearestExit = findNearestExit(human.x, human.z);
@@ -1101,7 +1350,7 @@
 
                 // 経路を定期的に更新（1秒ごと）
                 human.pathUpdateTimer += deltaTime;
-                if (human.pathUpdateTimer >= 1.0 || human.currentPath.length === 0) {
+                if (human.pathUpdateTimer >= 1.0 || !human.currentPath || human.currentPath.length === 0) {
                     human.currentPath = calculateCurvePath(human.x, human.z, human.targetX, human.targetZ);
                     human.pathIndex = 0;
                     human.pathUpdateTimer = 0;
@@ -1109,17 +1358,22 @@
                     // パス表示をクリアして再描画
                     clearPathLines();
                     
-                    // 詳細ログ出力
-                    console.log('パス情報:', human.currentPath.map((p, i) => `${i}: (${p.x.toFixed(1)}, ${p.z.toFixed(1)})`).join(', '));
+                    // 詳細ログ出力（仕様書6.3準拠）
+                    console.log('=== パス情報 ===');
+                    console.log('全ウェイポイント座標:', human.currentPath.map((p, i) => `${i}: (${p.x.toFixed(1)}, ${p.z.toFixed(1)})`).join(', '));
+                    console.log('目標出口:', `(${human.targetX.toFixed(1)}, ${human.targetZ.toFixed(1)})`);
                     
                     // 曲線経路表示（明るい緑）
-                    createPathLine(human.currentPath, 0x00ff00);
+                    if (human.currentPath && human.currentPath.length > 0) {
+                        createPathLine(human.currentPath, 0x00ff00);
+                        console.log('経路ライン表示完了');
+                    }
                     
                     // ウェイポイントマーカー表示（今回は省略）
                     // createWaypointMarkers(human.currentPath);
                     
                     // ゾンビ危険度表示
-                    // createDangerZones(); // モバイル向けに無効化
+                    createDangerZones();
                     
                     console.log('=== 経路更新完了 ===');
                 }
@@ -1166,24 +1420,37 @@
                     if (Math.abs(newX) < FIELD_SIZE_X/2 - 2 && Math.abs(newZ) < FIELD_SIZE_Z/2 - 2) {
                         human.x = newX;
                         human.z = newZ;
+                        // エンティティ統一システムの位置も更新
+                        human.position.x = human.x;
+                        human.position.z = human.z;
                         human.mesh.position.set(human.x, 1.0, human.z);
                         human.direction = Math.atan2(avoidanceDirection.z, avoidanceDirection.x);
                         console.log('緊急回避移動実行');
                     }
                 } else {
                     // 通常の経路に沿って移動
-                    if (human.currentPath.length > 1 && human.pathIndex < human.currentPath.length - 1) {
-                        const currentWaypoint = human.currentPath[human.pathIndex];
+                    if (human.currentPath && human.currentPath.length > 1 && human.pathIndex < human.currentPath.length - 1) {
                         const nextWaypoint = human.currentPath[human.pathIndex + 1];
                         
                         const dx = nextWaypoint.x - human.x;
                         const dz = nextWaypoint.z - human.z;
                         const distance = Math.sqrt(dx * dx + dz * dz);
                         
+                        // 距離が0に近い場合は次のウェイポイントへ
+                        if (distance < 0.1) {
+                            human.pathIndex++;
+                            console.log(`=== 移動状況 ===`);
+                            console.log(`ウェイポイント${human.pathIndex}に到達 (距離が近すぎ)`);
+                            return; // 次のフレームで処理
+                        }
+                        
                         // 移動前に安全性をチェック
                         let safeToMove = true;
-                        const plannedX = human.x + (dx / distance) * human.speed * deltaTime;
-                        const plannedZ = human.z + (dz / distance) * human.speed * deltaTime;
+                        const moveDistance = human.speed * deltaTime;
+                        const moveX = (dx / distance) * moveDistance;
+                        const moveZ = (dz / distance) * moveDistance;
+                        const plannedX = human.x + moveX;
+                        const plannedZ = human.z + moveZ;
                         
                         zombies.forEach(zombie => {
                             if (zombie.state === 'down') return;
@@ -1199,23 +1466,46 @@
                             // 次のウェイポイントに近づいたら次へ
                             if (distance < 1.0) {
                                 human.pathIndex++;
-                                console.log(`ウェイポイント${human.pathIndex}に到達`);
+                                console.log(`=== 移動状況 ===`);
+                                console.log(`ウェイポイント${human.pathIndex}に到達 (リアルタイム表示)`);
                             } else {
                                 // ウェイポイントに向かって移動
-                                const moveX = (dx / distance) * human.speed * deltaTime;
-                                const moveZ = (dz / distance) * human.speed * deltaTime;
-                                
                                 human.x += moveX;
                                 human.z += moveZ;
+                                // エンティティ統一システムの位置も更新
+                                human.position.x = human.x;
+                                human.position.z = human.z;
                                 human.mesh.position.set(human.x, 1.0, human.z);
                                 
                                 // 進行方向を記録
                                 human.direction = Math.atan2(dz, dx);
+                                human.movement.direction = human.direction;
                             }
                         } else {
                             // 危険な移動は停止して経路再計算を促す
                             human.pathUpdateTimer = 1.0; // 即座に再計算
                             console.log('危険な移動を検出、経路再計算');
+                        }
+                    } else if (!human.currentPath || human.currentPath.length === 0) {
+                        // 経路がない場合は直接目標に向かう
+                        const dx = human.targetX - human.x;
+                        const dz = human.targetZ - human.z;
+                        const distance = Math.sqrt(dx * dx + dz * dz);
+                        
+                        if (distance > 0.1) {
+                            const moveDistance = human.speed * deltaTime;
+                            const moveX = (dx / distance) * moveDistance;
+                            const moveZ = (dz / distance) * moveDistance;
+                            
+                            human.x += moveX;
+                            human.z += moveZ;
+                            human.position.x = human.x;
+                            human.position.z = human.z;
+                            human.mesh.position.set(human.x, 1.0, human.z);
+                            human.direction = Math.atan2(dz, dx);
+                            human.movement.direction = human.direction;
+                            
+                            console.log('直接移動中:', human.x.toFixed(2), human.z.toFixed(2));
                         }
                     }
                 }
@@ -1242,6 +1532,8 @@
                 if (zombie.state === 'down') {
                     zombie.downTimer -= deltaTime;
                     if (zombie.downTimer <= 0) {
+                        console.log(`=== AI状態変化 ===`);
+                        console.log(`ゾンビ${zombie.id}: down → wandering (復帰)`);
                         zombie.state = 'wandering';
                         zombie.mesh.rotation.z = 0; // 元の向きに戻す
                         zombie.wanderTimer = 0;
@@ -1292,10 +1584,17 @@
                         const moveZ = Math.sin(zombie.direction) * zombie.speed * 0.5 * deltaTime;
                         zombie.x += moveX;
                         zombie.z += moveZ;
+                        // エンティティ統一システムの位置も更新
+                        zombie.position.x = zombie.x;
+                        zombie.position.z = zombie.z;
                         zombie.mesh.position.set(zombie.x, 1.0, zombie.z);
                         
                         // 人が検知範囲内にいるか確認
                         if (distance <= ZOMBIE_DETECTION_RANGE) {
+                            if (zombie.state !== 'rotating') {
+                                console.log(`=== AI状態変化 ===`);
+                                console.log(`ゾンビ${zombie.id}: wandering → rotating (人を発見, 距離: ${distance.toFixed(1)})`);
+                            }
                             zombie.state = 'rotating';
                             zombie.targetDirection = Math.atan2(dz, dx);
                             
@@ -1313,6 +1612,8 @@
                         const normalizedDiff = ((angleDiff + Math.PI) % (2 * Math.PI)) - Math.PI;
                         
                         if (Math.abs(normalizedDiff) < 0.1) {
+                            console.log(`=== AI状態変化 ===`);
+                            console.log(`ゾンビ${zombie.id}: rotating → chasing (回転完了)`);
                             zombie.state = 'chasing';
                             zombie.direction = zombie.targetDirection;
                         }
@@ -1327,11 +1628,16 @@
                             
                             zombie.x += moveX;
                             zombie.z += moveZ;
+                            // エンティティ統一システムの位置も更新
+                            zombie.position.x = zombie.x;
+                            zombie.position.z = zombie.z;
                             zombie.mesh.position.set(zombie.x, 1.0, zombie.z);
                         }
                         
                         // 人が遠くに行ったらランダム移動に戻る
                         if (distance > ZOMBIE_DETECTION_RANGE) {
+                            console.log(`=== AI状態変化 ===`);
+                            console.log(`ゾンビ${zombie.id}: chasing → wandering (人を見失う, 距離: ${distance.toFixed(1)})`);
                             zombie.state = 'wandering';
                             zombie.wanderTimer = 0;
                         }
@@ -1350,18 +1656,22 @@
                     const moveZ = Math.sin(zombie.direction) * zombie.speed * 0.5 * deltaTime;
                     zombie.x += moveX;
                     zombie.z += moveZ;
+                    // エンティティ統一システムの位置も更新
+                    zombie.position.x = zombie.x;
+                    zombie.position.z = zombie.z;
                     zombie.mesh.position.set(zombie.x, 1.0, zombie.z);
                 }
             });
 
-            // エフェクトの更新
+            // エフェクトの更新（アクティブカウンター管理）
             effects = effects.filter(effect => {
                 effect.life -= deltaTime;
                 const alpha = effect.life / effect.maxLife;
-                effect.mesh.material.opacity = alpha * 0.6;
+                effect.mesh.material.opacity = alpha * 0.8;
                 
                 if (effect.life <= 0) {
                     scene.remove(effect.mesh);
+                    activeTapEffects = Math.max(0, activeTapEffects - 1); // カウンター減少
                     return false;
                 }
                 return true;
@@ -1400,7 +1710,7 @@
                 createDebugLine(zombie.x, zombie.z, endX, endZ, color);
             });
 
-            // 個別プロパティから統一プロパティへ逆同期
+            // 個別プロパティから統一プロパティへ逆同期（レガシーコード完全動作保証）
             entities.forEach(entity => {
                 // 位置の逆同期
                 entity.position.x = entity.x;
@@ -1423,10 +1733,10 @@
             });
 
             // 危険ゾーンをリアルタイム更新
-            // createDangerZones(); // モバイル向けに無効化
+            createDangerZones();
 
             updateHUD();
-            // updateDebugInfo(); // デバッグ表示を無効化
+            // デバッグ表示はコンソールログのみ（モバイル最適化）
         }
 
         // 次のステージへ
@@ -1508,9 +1818,9 @@
 
             updateGame(deltaTime);
             
-            // ゲーム開始前でもデバッグ情報を更新
+            // ゲーム開始前の状態もコンソールログで確認可能
             if (gameState === 'menu') {
-                // updateDebugInfo(); // デバッグ表示を無効化
+                // デバッグ表示はコンソールログのみ（モバイル最適化）
             }
             
             renderer.render(scene, camera);
@@ -1523,18 +1833,25 @@
             initScene();
             initRenderer();
 
-            // 初期デバッグ情報の表示
-            // updateDebugInfo(); // デバッグ表示を無効化
+            // 初期デバッグ情報はコンソールログのみ
+            console.log('=== 初期化デバッグ情報 ===');
+            console.log('フィールドサイズ:', FIELD_SIZE_X, 'x', FIELD_SIZE_Z);
+            console.log('カメラ位置:', camera.position);
+            console.log('床下視点システム: 有効');
 
             // イベントリスナーの追加
             window.addEventListener('resize', onWindowResize);
             
-            // タッチイベント
+            // マウスイベント（PC用）
+            renderer.domElement.addEventListener('mousedown', handleMouseDown);
+            renderer.domElement.addEventListener('mousemove', handleMouseMove);
+            renderer.domElement.addEventListener('mouseup', handleMouseUp);
+            renderer.domElement.addEventListener('wheel', handleWheel, { passive: false });
+            
+            // タッチイベント（スマホ用）
             renderer.domElement.addEventListener('touchstart', handleTouch, { passive: false });
             renderer.domElement.addEventListener('touchmove', handleTouch, { passive: false });
-            
-            // マウスイベント（PC用）
-            renderer.domElement.addEventListener('mousedown', handleTouch);
+            renderer.domElement.addEventListener('touchend', handleTouchEnd, { passive: false });
 
             // スタートボタンのイベントリスナー
             const startButton = document.getElementById('startButton');
