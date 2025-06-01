@@ -205,7 +205,7 @@
 
         function handleCameraDrag(deltaX, deltaY) {
             const currentPos = camera.position.clone();
-            const dragX = -deltaX * cameraControls.dragSensitivity * cameraControls.currentZoom; // 左右反転
+            const dragX = deltaX * cameraControls.dragSensitivity * cameraControls.currentZoom; // 左右反転を修正
             const dragZ = deltaY * cameraControls.dragSensitivity * cameraControls.currentZoom;
             
             camera.position.x = currentPos.x + dragX;
@@ -1080,7 +1080,7 @@
                 if (cameraControls.isDragging) {
                     const deltaX = (centerX - cameraControls.lastMouseX) * 0.5; // 感度を半分に
                     const deltaY = (centerY - cameraControls.lastMouseY) * 0.5;
-                    handleCameraDrag(-deltaX, deltaY); // 左右反転適用
+                    handleCameraDrag(deltaX, deltaY); // 左右反転を削除（既にhandleCameraDragで処理済み）
                     cameraControls.lastMouseX = centerX;
                     cameraControls.lastMouseY = centerY;
                 }
@@ -1427,7 +1427,8 @@
                 }
 
                 // デバッグログ（1秒ごと）
-                if (Math.floor(gameTime) % 1 === 0 && Math.floor(gameTime) !== Math.floor(gameTime - deltaTime)) {
+                // デバッグログを3秒ごとに削減（処理負荷軽減）
+                if (Math.floor(gameTime) % 3 === 0 && Math.floor(gameTime) !== Math.floor(gameTime - deltaTime)) {
                     console.log(`=== 人${index + 1}状況 ===`);
                     console.log(`位置: (${human.x.toFixed(1)}, ${human.z.toFixed(1)})`);
                     console.log(`状態: ${human.state}, 生存: ${human.alive}`);
@@ -1454,9 +1455,9 @@
                     return;
                 }
 
-                // 経路を定期的に更新（1秒ごと）
+                // 経路を定期的に更新（1.5秒ごとに軽減）
                 human.pathUpdateTimer += deltaTime;
-                if (human.pathUpdateTimer >= 1.0 || !human.currentPath || human.currentPath.length === 0) {
+                if (human.pathUpdateTimer >= 1.5 || !human.currentPath || human.currentPath.length === 0) {
                     human.currentPath = calculateCurvePath(human.x, human.z, human.targetX, human.targetZ);
                     human.pathIndex = 0;
                     human.pathUpdateTimer = 0;
@@ -1478,7 +1479,7 @@
                     // ウェイポイントマーカー表示（今回は省略）
                     // createWaypointMarkers(human.currentPath);
                     
-                    // ゾンビ危険度表示
+                    // ゾンビ危険度表示（経路更新時のみ）
                     createDangerZones();
                     
                     console.log('=== 経路更新完了 ===');
@@ -1873,8 +1874,8 @@
                 }
             });
 
-            // 危険ゾーンをリアルタイム更新
-            createDangerZones();
+            // 危険ゾーン更新を削除（処理負荷軽減・経路更新時のみ実行）
+            // createDangerZones();
 
             updateHUD();
             // デバッグ表示はコンソールログのみ（モバイル最適化）
