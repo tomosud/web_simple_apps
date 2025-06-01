@@ -146,7 +146,8 @@
         const CONTACT_TIME_LIMIT = 1.0; // 接触判定時間（秒）
         const CONTACT_DISTANCE = 1.0; // 接触判定距離
         const ZOMBIE_DETECTION_RANGE = 20.0; // ゾンビの人検知範囲（遠くから見渡す）
-        const HUMAN_AVOIDANCE_RANGE = 8.0; // 人の回避範囲（適正化）
+        const HUMAN_AVOIDANCE_RANGE = 8.0; // 人の回避範囲（危険ゾーン）
+        const HUMAN_WARNING_RANGE = 12.0; // 人の警戒ゾーン（早めの回避）
         const ZOMBIE_ROTATION_SPEED = 4.0; // ゾンビの回転速度
         const ENTRANCE_SIZE = 3.0; // 入口のサイズ
         const EXIT_SIZE = 3.0; // 出口のサイズ
@@ -600,18 +601,13 @@
             
             // 初期経路を即座に計算
             if (entity.targetX !== undefined && entity.targetZ !== undefined) {
-                entity.currentPath = calculateCurvePath(entity.x, entity.z, entity.targetX, entity.targetZ);
+                entity.currentPath = calculateOptimalPath(entity.x, entity.z, entity.targetX, entity.targetZ);
                 entity.pathIndex = 0;
                 entity.movement.path = entity.currentPath;
                 entity.movement.pathIndex = entity.pathIndex;
                 
-                // 初期経路ラインを表示
-                clearPathLines();
-                createPathLine(entity.currentPath, 0x00ff00);
-                createDangerZones();
-                
-                console.log('初期経路計算完了:', entity.currentPath.length, 'ポイント');
-                console.log('初期経路ライン表示完了');
+                console.log('初期経路計算完了:', entity.currentPath.length, 'セグメント');
+                console.log('初期経路準備完了（描画は移動時に実行）');
             }
             
             console.log('人を作成:', x, z, '→ 出口:', entity.targetX, entity.targetZ);
@@ -680,6 +676,25 @@
             effects.push(effect);
         }
 
+        // 全エフェクトを強制削除する関数
+        function clearAllEffects() {
+            effects.forEach(effect => {
+                if (effect.mesh) {
+                    scene.remove(effect.mesh);
+                    if (effect.mesh.geometry) effect.mesh.geometry.dispose();
+                    if (effect.mesh.material) effect.mesh.material.dispose();
+                }
+                if (effect.innerMesh) {
+                    scene.remove(effect.innerMesh);
+                    if (effect.innerMesh.geometry) effect.innerMesh.geometry.dispose();
+                    if (effect.innerMesh.material) effect.innerMesh.material.dispose();
+                }
+            });
+            effects = [];
+            activeTapEffects = 0;
+            console.log('全エフェクト強制削除完了');
+        }
+
         // デバッグライン作成
         function createDebugLine(startX, startZ, endX, endZ, color) {
             const points = [];
@@ -700,10 +715,37 @@
             debugLines = [];
         }
 
-        // パスラインをクリア
+        // パスラインを確実にクリア（強化版）
         function clearPathLines() {
-            pathLines.forEach(line => scene.remove(line));
+            // pathLinesの削除
+            pathLines.forEach(line => {
+                scene.remove(line);
+                if (line.geometry) line.geometry.dispose();
+                if (line.material) line.material.dispose();
+            });
             pathLines = [];
+
+            // シーンから経路関連のオブジェクトを全て削除
+            const toRemove = [];
+            scene.children.forEach(child => {
+                if (child.userData && child.userData.pathLine) {
+                    toRemove.push(child);
+                }
+                // LineBasicMaterialを使った線オブジェクトを検索
+                if (child.type === 'Line' && child.material && child.material.color) {
+                    // 緑色の経路ラインを削除
+                    if (child.material.color.getHex() === 0x00ff00) {
+                        toRemove.push(child);
+                    }
+                }
+            });
+            toRemove.forEach(obj => {
+                scene.remove(obj);
+                if (obj.geometry) obj.geometry.dispose();
+                if (obj.material) obj.material.dispose();
+            });
+
+            console.log('全経路ライン削除完了:', pathLines.length + toRemove.length, '個のオブジェクト');
         }
 
         // パスライン作成
@@ -725,6 +767,7 @@
                 linewidth: 3
             });
             const line = new THREE.Line(geometry, material);
+            line.userData.pathLine = true; // 経路ライン識別用
             
             scene.add(line);
             pathLines.push(line);
@@ -732,200 +775,205 @@
 
         // ゾンビ危険ゾーンの表示（輪のみ描画）
         function createDangerZones() {
-            // 既存の危険ゾーンをクリア
+            // 既存のゾーンを確実にクリア
             const toRemove = [];
             scene.children.forEach(child => {
-                if (child.userData && child.userData.dangerZone) {
+                if (child.userData && (child.userData.dangerZone || child.userData.warningZone)) {
                     toRemove.push(child);
                 }
             });
-            toRemove.forEach(obj => scene.remove(obj));
+            toRemove.forEach(obj => {
+                scene.remove(obj);
+                if (obj.geometry) obj.geometry.dispose();
+                if (obj.material) obj.material.dispose();
+            });
+            
+            console.log(`危険ゾーン削除: ${toRemove.length}個のオブジェクト`);
 
             // 後方互換性のため配列を更新
             updateCompatibilityArrays();
 
-            // 各ゾンビの危険ゾーンを表示（輪のみ）
+            // 各ゾンビの警戒ゾーンと危険ゾーンを表示
             zombies.forEach(zombie => {
                 if (zombie.state === 'down') return;
 
-                // 危険ゾーンの細い輪のみ表示（30%サイズ）
-                const visualRadius = HUMAN_AVOIDANCE_RANGE * 0.3;
-                const outerRadius = visualRadius;
-                const innerRadius = visualRadius - 0.2; // 細い輪
-                
-                // 輪のみ描画（塗りつぶしなし）
-                const geometry = new THREE.RingGeometry(innerRadius, outerRadius, 32);
-                const material = new THREE.MeshBasicMaterial({
-                    color: 0xff0000,
+                // 警戒ゾーン（枠のみ表示・薄いオレンジ）
+                const warningRadius = HUMAN_WARNING_RANGE * 0.6;
+                const warningInnerRadius = warningRadius - 0.3; // 細い枠
+                const warningGeometry = new THREE.RingGeometry(warningInnerRadius, warningRadius, 32);
+                const warningMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xffa500,
                     transparent: true,
-                    opacity: 0.6,
+                    opacity: 0.3, // 薄く表示
                     side: THREE.DoubleSide
                 });
-                const dangerRing = new THREE.Mesh(geometry, material);
-                dangerRing.position.set(zombie.x, 0.1, zombie.z);
-                dangerRing.rotation.x = -Math.PI / 2;
-                dangerRing.userData.dangerZone = true;
-                scene.add(dangerRing);
+                const warningRing = new THREE.Mesh(warningGeometry, warningMaterial);
+                warningRing.position.set(zombie.x, 0.05, zombie.z);
+                warningRing.rotation.x = -Math.PI / 2;
+                warningRing.userData.warningZone = true;
+                scene.add(warningRing);
+
+                // 危険ゾーン（薄く表示）
+                const dangerRadius = HUMAN_AVOIDANCE_RANGE * 0.8 * 0.6;
+                const dangerInnerRadius = 0;
+                const dangerGeometry = new THREE.CircleGeometry(dangerRadius, 32);
+                const dangerMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xff4444,
+                    transparent: true,
+                    opacity: 0.2, // より薄く表示
+                    side: THREE.DoubleSide
+                });
+                const dangerCircle = new THREE.Mesh(dangerGeometry, dangerMaterial);
+                dangerCircle.position.set(zombie.x, 0.1, zombie.z);
+                dangerCircle.rotation.x = -Math.PI / 2;
+                dangerCircle.userData.dangerZone = true;
+                scene.add(dangerCircle);
             });
+            
+            console.log(`危険ゾーン表示完了: ${zombies.filter(z => z.state !== 'down').length}匹分のゾーン表示`);
         }
 
-        // 改良版高度パスファインディングシステム
-        function calculateCurvePath(startX, startZ, goalX, goalZ) {
-            const totalDistance = Math.sqrt((goalX - startX) ** 2 + (goalZ - startZ) ** 2);
-            // より滑らかな経路のため、距離に応じてウェイポイント数を調整
-            const numWaypoints = Math.max(5, Math.min(10, Math.floor(totalDistance / 8)));
-            
-            const path = [{x: startX, z: startZ}];
-            
-            console.log('=== 改良版曲線経路計算開始 ===');
+        // 真の最短経路探索システム（グリッドベースA*）
+        function calculateOptimalPath(startX, startZ, goalX, goalZ) {
+            console.log('=== 最短経路計算開始 ===');
             console.log('スタート:', startX.toFixed(1), startZ.toFixed(1));
             console.log('ゴール:', goalX.toFixed(1), goalZ.toFixed(1));
-            console.log('総距離:', totalDistance.toFixed(1), 'ウェイポイント数:', numWaypoints);
             
-            // 直線経路上の中間点を生成
-            for (let i = 1; i < numWaypoints; i++) {
-                const t = i / numWaypoints;
-                const x = startX + (goalX - startX) * t;
-                const z = startZ + (goalZ - startZ) * t;
-                path.push({x, z});
+            // まず直線経路が安全かチェック
+            if (isDirectPathSafe(startX, startZ, goalX, goalZ)) {
+                console.log('直線経路が安全なため、最短経路を採用');
+                return [{x: startX, z: startZ}, {x: goalX, z: goalZ}];
             }
             
-            path.push({x: goalX, z: goalZ});
+            // 直線が危険な場合、迂回経路を探索
+            const path = findSafestShortestPath(startX, startZ, goalX, goalZ);
             
-            // 各中間点で改良された候補位置を評価
-            for (let i = 1; i < path.length - 1; i++) {
-                const point = path[i];
-                let bestOffset = {x: 0, z: 0};
-                let minDanger = Infinity;
-                let bestNearestZombieDistance = Infinity;
-                
-                // 改良された候補点評価システム（より滑らかな経路）
-                const candidates = [];
-                
-                // 円形に配置された候補点（より滑らかな回避）
-                const maxRadius = 6;
-                for (let radius = 0; radius <= maxRadius; radius += 0.5) {
-                    const steps = radius === 0 ? 1 : Math.max(8, Math.floor(radius * 4));
-                    for (let angle = 0; angle < 2 * Math.PI; angle += (2 * Math.PI) / steps) {
-                        candidates.push({
-                            x: Math.cos(angle) * radius,
-                            z: Math.sin(angle) * radius
-                        });
-                    }
-                }
-                
-                candidates.forEach(offset => {
-                    const testX = point.x + offset.x;
-                    const testZ = point.z + offset.z;
-                    
-                    // 境界チェック
-                    if (Math.abs(testX) > FIELD_SIZE_X/2 - 2 || Math.abs(testZ) > FIELD_SIZE_Z/2 - 2) {
-                        return;
-                    }
-                    
-                    // 改良された危険度計算
-                    let dangerScore = 0;
-                    let isCurrentlyInDanger = false;
-                    let nearestZombieDistance = Infinity;
-                    
-                    zombies.forEach(zombie => {
-                        if (zombie.state === 'down') return;
-                        
-                        const dx = zombie.x - testX;
-                        const dz = zombie.z - testZ;
-                        const distance = Math.sqrt(dx * dx + dz * dz);
-                        
-                        if (distance < nearestZombieDistance) {
-                            nearestZombieDistance = distance;
-                        }
-                        
-                        // 改良された危険度計算
-                        const avoidanceRange = HUMAN_AVOIDANCE_RANGE * 0.6; // より狭い回避範囲
-                        
-                        if (distance < CONTACT_DISTANCE) {
-                            isCurrentlyInDanger = true;
-                            dangerScore += 10000; // 即死圏内は絶対回避
-                        } else if (distance < avoidanceRange) {
-                            // 危険ゾーンに対する段階的ペナルティ
-                            const normalizedDistance = distance / avoidanceRange;
-                            const rangeDanger = Math.pow(1 - normalizedDistance, 2) * 200;
-                            dangerScore += rangeDanger;
-                        }
-                        
-                        // ゾンビの移動方向を考慮した予測危険度
-                        if (zombie.state === 'chasing' && distance < avoidanceRange * 1.5) {
-                            const futureX = zombie.x + Math.cos(zombie.direction) * zombie.speed * 2;
-                            const futureZ = zombie.z + Math.sin(zombie.direction) * zombie.speed * 2;
-                            const futureDx = futureX - testX;
-                            const futureDz = futureZ - testZ;
-                            const futureDistance = Math.sqrt(futureDx * futureDx + futureDz * futureDz);
-                            
-                            if (futureDistance < avoidanceRange) {
-                                dangerScore += 50;
-                            }
-                        }
-                    });
-                    
-                    // 境界との距離ペナルティ
-                    const edgeDistance = Math.min(
-                        FIELD_SIZE_X/2 - Math.abs(testX),
-                        FIELD_SIZE_Z/2 - Math.abs(testZ)
-                    );
-                    if (edgeDistance < 3) {
-                        dangerScore += (3 - edgeDistance) * 20;
-                    }
-                    
-                    // ゴールとの距離バイアス（積極性を考慮）
-                    const goalDx = goalX - testX;
-                    const goalDz = goalZ - testZ;
-                    const goalDistance = Math.sqrt(goalDx * goalDx + goalDz * goalDz);
-                    
-                    // 現在危険でない場合は、ゴールに近いほど有利
-                    if (!isCurrentlyInDanger) {
-                        dangerScore += goalDistance * 0.05; // 積極的なゴール指向
-                    } else {
-                        dangerScore += goalDistance * 0.2; // 危険時はより慎重
-                    }
-                    
-                    // 経路の滑らかさを考慮
-                    if (i > 1) {
-                        const prevPoint = path[i - 1];
-                        const prevDx = testX - prevPoint.x;
-                        const prevDz = testZ - prevPoint.z;
-                        
-                        if (i < path.length - 2) {
-                            const nextPoint = path[i + 1];
-                            const nextDx = nextPoint.x - testX;
-                            const nextDz = nextPoint.z - testZ;
-                            
-                            // 角度の急激な変化にペナルティ
-                            const prevAngle = Math.atan2(prevDz, prevDx);
-                            const nextAngle = Math.atan2(nextDz, nextDx);
-                            let angleDiff = Math.abs(nextAngle - prevAngle);
-                            if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
-                            
-                            dangerScore += angleDiff * 5; // 滑らかさボーナス
-                        }
-                    }
-                    
-                    // 最適位置を更新
-                    if (!isCurrentlyInDanger && dangerScore < minDanger) {
-                        minDanger = dangerScore;
-                        bestOffset = offset;
-                        bestNearestZombieDistance = nearestZombieDistance;
-                    }
-                });
-                
-                // 最適位置に更新
-                point.x += bestOffset.x;
-                point.z += bestOffset.z;
-                
-                console.log(`ウェイポイント${i}: (${point.x.toFixed(1)}, ${point.z.toFixed(1)}) 危険度: ${minDanger.toFixed(1)} 最近距離: ${bestNearestZombieDistance.toFixed(1)}`);
-            }
-            
-            console.log('=== 改良版曲線経路計算完了 ===');
+            console.log('=== 経路計算完了 ===');
             console.log('最終経路:', path.map((p, i) => `${i}: (${p.x.toFixed(1)}, ${p.z.toFixed(1)})`).join(' → '));
             return path;
+        }
+
+        // 直線経路の安全性チェック
+        function isDirectPathSafe(startX, startZ, goalX, goalZ) {
+            const distance = Math.sqrt((goalX - startX) ** 2 + (goalZ - startZ) ** 2);
+            const steps = Math.ceil(distance * 2); // 0.5単位で細かくチェック
+            
+            for (let i = 0; i <= steps; i++) {
+                const t = i / steps;
+                const checkX = startX + (goalX - startX) * t;
+                const checkZ = startZ + (goalZ - startZ) * t;
+                
+                // この点が危険かチェック
+                for (const zombie of zombies) {
+                    if (zombie.state === 'down') continue;
+                    
+                    const dx = zombie.x - checkX;
+                    const dz = zombie.z - checkZ;
+                    const zombieDistance = Math.sqrt(dx * dx + dz * dz);
+                    
+                    if (zombieDistance < HUMAN_AVOIDANCE_RANGE * 0.8) {
+                        return false; // 危険ゾーンに接触
+                    }
+                }
+            }
+            return true; // 直線経路は安全
+        }
+
+        // 最短かつ安全な経路探索
+        function findSafestShortestPath(startX, startZ, goalX, goalZ) {
+            // ゴール方向の単位ベクトル
+            const totalDistance = Math.sqrt((goalX - startX) ** 2 + (goalZ - startZ) ** 2);
+            const goalDirX = (goalX - startX) / totalDistance;
+            const goalDirZ = (goalZ - startZ) / totalDistance;
+            
+            const path = [{x: startX, z: startZ}];
+            let currentX = startX;
+            let currentZ = startZ;
+            
+            // 段階的にゴールに向かって進む
+            const stepSize = Math.min(4, totalDistance / 5); // 適応的ステップサイズ
+            
+            while (Math.sqrt((goalX - currentX) ** 2 + (goalZ - currentZ) ** 2) > stepSize) {
+                const nextPoint = findNextSafePoint(currentX, currentZ, goalX, goalZ, stepSize);
+                
+                if (nextPoint) {
+                    path.push(nextPoint);
+                    currentX = nextPoint.x;
+                    currentZ = nextPoint.z;
+                } else {
+                    // 次の安全な点が見つからない場合、より小さいステップで試す
+                    const smallerStep = stepSize * 0.5;
+                    const fallbackPoint = findNextSafePoint(currentX, currentZ, goalX, goalZ, smallerStep);
+                    if (fallbackPoint) {
+                        path.push(fallbackPoint);
+                        currentX = fallbackPoint.x;
+                        currentZ = fallbackPoint.z;
+                    } else {
+                        console.log('経路が見つからない - 直線経路にフォールバック');
+                        break;
+                    }
+                }
+            }
+            
+            // 最終的にゴールを追加
+            path.push({x: goalX, z: goalZ});
+            return path;
+        }
+
+        // 次の安全な点を探索
+        function findNextSafePoint(currentX, currentZ, goalX, goalZ, stepSize) {
+            let bestPoint = null;
+            let bestScore = Infinity;
+            
+            // ゴール方向を優先した扇形探索
+            const goalAngle = Math.atan2(goalZ - currentZ, goalX - currentX);
+            const searchAngles = [];
+            
+            // ゴール方向を中心に±60度の範囲で探索
+            for (let offset = -Math.PI/3; offset <= Math.PI/3; offset += Math.PI/12) {
+                searchAngles.push(goalAngle + offset);
+            }
+            
+            // 各角度での候補点を評価
+            searchAngles.forEach(angle => {
+                const testX = currentX + Math.cos(angle) * stepSize;
+                const testZ = currentZ + Math.sin(angle) * stepSize;
+                
+                // 境界チェック
+                if (Math.abs(testX) > FIELD_SIZE_X/2 - 2 || Math.abs(testZ) > FIELD_SIZE_Z/2 - 2) {
+                    return;
+                }
+                
+                // 安全性チェック
+                if (isPointSafe(testX, testZ)) {
+                    // ゴールまでの距離でスコア計算
+                    const goalDistance = Math.sqrt((goalX - testX) ** 2 + (goalZ - testZ) ** 2);
+                    const score = goalDistance;
+                    
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestPoint = {x: testX, z: testZ};
+                    }
+                }
+            });
+            
+            return bestPoint;
+        }
+
+        // 点の安全性チェック
+        function isPointSafe(x, z) {
+            for (const zombie of zombies) {
+                if (zombie.state === 'down') continue;
+                
+                const dx = zombie.x - x;
+                const dz = zombie.z - z;
+                const distance = Math.sqrt(dx * dx + dz * dz);
+                
+                if (distance < HUMAN_AVOIDANCE_RANGE * 0.8) {
+                    return false; // 危険ゾーンに接触
+                }
+            }
+            return true;
         }
 
         // ゲームの初期化
@@ -945,9 +993,8 @@
             entities.forEach(entity => {
                 if (entity.mesh) scene.remove(entity.mesh);
             });
-            effects.forEach(effect => {
-                if (effect.mesh) scene.remove(effect.mesh);
-            });
+            // 全エフェクトの確実な削除
+            clearAllEffects();
             clearDebugLines();
             
             // エンティティIDをリセット
@@ -979,6 +1026,11 @@
 
             gameTime = 0;
             updateHUD();
+            
+            // 初期表示を確実に実行
+            createDangerZones();
+            console.log('初期危険ゾーン表示完了');
+            
             // デバッグ情報はコンソールログのみ（モバイル最適化）
             console.log('=== ゲーム初期化完了 ===');
             console.log('人数:', humans.length, 'ゾンビ数:', zombies.length);
@@ -1457,29 +1509,30 @@
 
                 // 経路を定期的に更新（1.5秒ごとに軽減）
                 human.pathUpdateTimer += deltaTime;
-                if (human.pathUpdateTimer >= 1.5 || !human.currentPath || human.currentPath.length === 0) {
-                    human.currentPath = calculateCurvePath(human.x, human.z, human.targetX, human.targetZ);
+                if (human.pathUpdateTimer >= 1.0 || !human.currentPath || human.currentPath.length === 0) {
+                    // プレイヤーの現在位置からゴールまでの新しい経路を計算
+                    human.currentPath = calculateOptimalPath(human.x, human.z, human.targetX, human.targetZ);
                     human.pathIndex = 0;
                     human.pathUpdateTimer = 0;
                     
-                    // パス表示をクリアして再描画
+                    // 古い経路表示を確実にクリア
                     clearPathLines();
                     
-                    // 詳細ログ出力（仕様書6.3準拠）
-                    console.log('=== パス情報 ===');
-                    console.log('全ウェイポイント座標:', human.currentPath.map((p, i) => `${i}: (${p.x.toFixed(1)}, ${p.z.toFixed(1)})`).join(', '));
-                    console.log('目標出口:', `(${human.targetX.toFixed(1)}, ${human.targetZ.toFixed(1)})`);
+                    // 詳細ログ出力
+                    console.log('=== 現在位置からゴールへの経路更新 ===');
+                    console.log('現在位置:', `(${human.x.toFixed(1)}, ${human.z.toFixed(1)})`);
+                    console.log('目標ゴール:', `(${human.targetX.toFixed(1)}, ${human.targetZ.toFixed(1)})`);
+                    console.log('経路セグメント:', human.currentPath.length);
                     
-                    // 曲線経路表示（明るい緑）
+                    // プレイヤー位置からゴールまでの経路を描画
                     if (human.currentPath && human.currentPath.length > 0) {
                         createPathLine(human.currentPath, 0x00ff00);
-                        console.log('経路ライン表示完了');
+                        console.log('プレイヤー→ゴール経路描画完了');
+                    } else {
+                        console.log('経路計算失敗');
                     }
                     
-                    // ウェイポイントマーカー表示（今回は省略）
-                    // createWaypointMarkers(human.currentPath);
-                    
-                    // ゾンビ危険度表示（経路更新時のみ）
+                    // ゾンビ危険度表示も更新
                     createDangerZones();
                     
                     console.log('=== 経路更新完了 ===');
@@ -1497,8 +1550,8 @@
                     const dz = zombie.z - human.z;
                     const distance = Math.sqrt(dx * dx + dz * dz);
                     
-                    // 緊急回避が必要な距離（より控えめに）
-                    const emergencyDistance = CONTACT_DISTANCE * 3;
+                    // 緊急回避が必要な距離（警戒ゾーンで開始）
+                    const emergencyDistance = HUMAN_WARNING_RANGE * 0.8;
                     if (distance < emergencyDistance) {
                         emergencyAvoidance = true;
                         // ゾンビから逃げる方向を計算
@@ -1571,20 +1624,23 @@
                             const checkDz = zombie.z - plannedZ;
                             const checkDistance = Math.sqrt(checkDx * checkDx + checkDz * checkDz);
                             
-                            // 危険度に応じた段階的判定
+                            // 立ち止まりを減らす改良された判定システム
                             if (checkDistance < CONTACT_DISTANCE * 1.5) {
-                                safeToMove = false; // 絶対に危険
-                                riskLevel = 3;
-                            } else if (checkDistance < CONTACT_DISTANCE * 2.5) {
-                                if (!isVeryNearGoal) { // ゴール直前でなければ停止
+                                safeToMove = false; // 絶対に危険（即死圏内）
+                                riskLevel = 4;
+                            } else if (checkDistance < HUMAN_AVOIDANCE_RANGE * 0.8) {
+                                // 危険ゾーン：ゴール直前のみ通過を許可
+                                if (!isVeryNearGoal) {
                                     safeToMove = false;
-                                    riskLevel = 2;
+                                    riskLevel = 3;
                                 }
-                            } else if (checkDistance < CONTACT_DISTANCE * 4) {
-                                if (!isNearGoal) { // ゴール近くでなければ慎重
-                                    safeToMove = false;
-                                    riskLevel = 1;
-                                }
+                            }
+                            // 警戒ゾーンでは立ち止まらず、経路計算で回避する
+                            // リスクレベルのみ記録（移動停止はしない）
+                            else if (checkDistance < HUMAN_WARNING_RANGE) {
+                                riskLevel = Math.max(riskLevel, 2);
+                            } else if (checkDistance < HUMAN_WARNING_RANGE * 1.3) {
+                                riskLevel = Math.max(riskLevel, 1);
                             }
                         });
                         
@@ -1809,11 +1865,21 @@
                 }
                 
                 if (effect.life <= 0) {
-                    scene.remove(effect.mesh);
+                    // メッシュの安全な削除
+                    if (effect.mesh) {
+                        scene.remove(effect.mesh);
+                        if (effect.mesh.geometry) effect.mesh.geometry.dispose();
+                        if (effect.mesh.material) effect.mesh.material.dispose();
+                        effect.mesh = null;
+                    }
                     if (effect.innerMesh) {
                         scene.remove(effect.innerMesh);
+                        if (effect.innerMesh.geometry) effect.innerMesh.geometry.dispose();
+                        if (effect.innerMesh.material) effect.innerMesh.material.dispose();
+                        effect.innerMesh = null;
                     }
                     activeTapEffects = Math.max(0, activeTapEffects - 1); // カウンター減少
+                    console.log('エフェクト削除完了, 残り:', activeTapEffects);
                     return false;
                 }
                 return true;
@@ -1874,8 +1940,8 @@
                 }
             });
 
-            // 危険ゾーン更新を削除（処理負荷軽減・経路更新時のみ実行）
-            // createDangerZones();
+            // ゾーン表示をリアルタイム更新（可視化のため）
+            createDangerZones();
 
             updateHUD();
             // デバッグ表示はコンソールログのみ（モバイル最適化）
@@ -1883,6 +1949,9 @@
 
         // 次のステージへ
         function nextStage() {
+            // ステージ切り替え時に全エフェクトを削除
+            clearAllEffects();
+            
             // 到達した出口の情報を記録
             const human = humans[0];
             const reachedExit = findNearestExit(human.x, human.z);
@@ -1936,6 +2005,9 @@
 
         // ゲーム敗北
         function gameLose() {
+            // ゲームオーバー時に全エフェクトを削除
+            clearAllEffects();
+            
             gameState = 'lose';
             gameRunning = false;
             document.getElementById('statusText').textContent = 'ゲームオーバー';
