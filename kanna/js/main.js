@@ -49,8 +49,15 @@ const elements = {
 document.addEventListener('DOMContentLoaded', init);
 
 function init() {
-    setupEventListeners();
-    checkDeviceMotionSupport();
+    console.log('🚀 鉋スライダー初期化開始');
+    try {
+        setupEventListeners();
+        checkDeviceMotionSupport();
+        console.log('✅ 初期化完了');
+    } catch (error) {
+        console.error('❌ 初期化エラー:', error);
+        showStatus('error', '初期化エラー: ' + error.message);
+    }
 }
 
 function setupEventListeners() {
@@ -103,28 +110,46 @@ async function requestPermission() {
 
 // 加速度監視開始
 function startAccelerationMonitoring() {
-    // Canvas初期化
-    initCanvas();
-    
-    // UI切り替え
-    elements.permissionSection.style.display = 'none';
-    elements.chartSection.style.display = 'flex';
-    
-    // センサーイベント登録
-    window.addEventListener('devicemotion', handleDeviceMotion);
-    
-    isChartActive = true;
-    elements.pauseBtn.textContent = '⏸️ 一時停止';
-    updateSensorInfo('センサー動作中 - 端末を動かしてください');
-    
-    // 描画ループ開始
-    startDrawLoop();
+    console.log('📱 加速度監視開始');
+    try {
+        // Canvas初期化
+        initCanvas();
+        console.log('🎨 Canvas初期化完了');
+        
+        // UI切り替え
+        elements.permissionSection.style.display = 'none';
+        elements.chartSection.style.display = 'flex';
+        
+        // センサーイベント登録
+        window.addEventListener('devicemotion', handleDeviceMotion);
+        console.log('📡 センサーイベント登録完了');
+        
+        isChartActive = true;
+        elements.pauseBtn.textContent = '⏸️ 一時停止';
+        updateSensorInfo('センサー動作中 - 端末を動かしてください');
+        
+        // 描画ループ開始
+        startDrawLoop();
+        console.log('🔄 描画ループ開始');
+    } catch (error) {
+        console.error('❌ 加速度監視開始エラー:', error);
+        showStatus('error', '開始エラー: ' + error.message);
+    }
 }
 
 // Canvas 初期化
 function initCanvas() {
+    console.log('🎨 Canvas初期化中...');
     canvas = document.getElementById('accelerationChart');
+    
+    if (!canvas) {
+        throw new Error('Canvasエレメントが見つかりません');
+    }
+    
     ctx = canvas.getContext('2d');
+    if (!ctx) {
+        throw new Error('Canvas 2Dコンテキストが取得できません');
+    }
     
     // 高DPI対応
     const dpr = window.devicePixelRatio || 1;
@@ -136,6 +161,8 @@ function initCanvas() {
     
     canvas.style.width = rect.width + 'px';
     canvas.style.height = rect.height + 'px';
+    
+    console.log(`📐 Canvas設定: ${rect.width}x${rect.height}, DPR: ${dpr}`);
 }
 
 // 描画ループ
