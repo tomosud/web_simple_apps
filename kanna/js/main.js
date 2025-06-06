@@ -10,7 +10,8 @@ const CONFIG = {
         yAxisRange: {
             min: -20,
             max: 20
-        }
+        },
+        maxDataPoints: 600 // 10秒 × 60fps
     },
     // センサー設定
     sensor: {
@@ -20,11 +21,18 @@ const CONFIG = {
 };
 
 // グローバル変数
-let chart = null;
+let canvas = null;
+let ctx = null;
 let isPermissionGranted = false;
 let isChartActive = false;
 let lastUpdateTime = 0;
 let smoothedAcceleration = { x: 0, y: 0, z: 0 };
+let dataPoints = {
+    x: [],
+    y: [],
+    z: [],
+    timestamps: []
+};
 
 // DOM要素
 const elements = {
@@ -95,8 +103,8 @@ async function requestPermission() {
 
 // 加速度監視開始
 function startAccelerationMonitoring() {
-    // グラフ初期化
-    initChart();
+    // Canvas初期化
+    initCanvas();
     
     // UI切り替え
     elements.permissionSection.style.display = 'none';
@@ -108,97 +116,128 @@ function startAccelerationMonitoring() {
     isChartActive = true;
     elements.pauseBtn.textContent = '⏸️ 一時停止';
     updateSensorInfo('センサー動作中 - 端末を動かしてください');
+    
+    // 描画ループ開始
+    startDrawLoop();
 }
 
-// Chart.js 初期化
-function initChart() {
-    // 既存のチャートが存在する場合は破棄
-    if (chart) {
-        chart.destroy();
-        chart = null;
+// Canvas 初期化
+function initCanvas() {
+    canvas = document.getElementById('accelerationChart');
+    ctx = canvas.getContext('2d');
+    
+    // 高DPI対応
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+    
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+}
+
+// 描画ループ
+function startDrawLoop() {
+    function draw() {
+        if (isChartActive) {
+            drawChart();
+        }
+        requestAnimationFrame(draw);
+    }
+    draw();
+}
+
+// チャート描画
+function drawChart() {
+    if (!canvas || !ctx) return;
+    
+    const width = canvas.width / (window.devicePixelRatio || 1);
+    const height = canvas.height / (window.devicePixelRatio || 1);
+    
+    // 背景クリア
+    ctx.clearRect(0, 0, width, height);
+    
+    // 背景
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+    
+    // グリッド描画
+    drawGrid(width, height);
+    
+    // データが存在する場合のみ描画
+    if (dataPoints.x.length > 0) {
+        drawDataLine(dataPoints.x, '#FF4444', width, height);
+        drawDataLine(dataPoints.y, '#44FF44', width, height);
+        drawDataLine(dataPoints.z, '#4444FF', width, height);
     }
     
-    const ctx = document.getElementById('accelerationChart').getContext('2d');
+    // 軸ラベル
+    drawAxisLabels(width, height);
+}
+
+// グリッド描画
+function drawGrid(width, height) {
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+    ctx.lineWidth = 1;
     
-    chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            datasets: [
-                {
-                    label: 'X軸 (左右)',
-                    borderColor: '#FF4444',
-                    backgroundColor: 'rgba(255, 68, 68, 0.1)',
-                    data: [],
-                    tension: 0.4,
-                    pointRadius: 0,
-                    borderWidth: 2
-                },
-                {
-                    label: 'Y軸 (前後)',
-                    borderColor: '#44FF44',
-                    backgroundColor: 'rgba(68, 255, 68, 0.1)',
-                    data: [],
-                    tension: 0.4,
-                    pointRadius: 0,
-                    borderWidth: 2
-                },
-                {
-                    label: 'Z軸 (上下)',
-                    borderColor: '#4444FF',
-                    backgroundColor: 'rgba(68, 68, 255, 0.1)',
-                    data: [],
-                    tension: 0.4,
-                    pointRadius: 0,
-                    borderWidth: 2
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: {
-                intersect: false,
-                mode: 'index'
-            },
-            plugins: {
-                legend: {
-                    display: false // 軸説明は別途表示
-                }
-            },
-            scales: {
-                x: {
-                    type: 'realtime',
-                    realtime: {
-                        duration: CONFIG.chart.displayDuration,
-                        refresh: CONFIG.chart.updateInterval,
-                        delay: 0,
-                        pause: false,
-                        ttl: undefined
-                    },
-                    title: {
-                        display: true,
-                        text: '時間'
-                    }
-                },
-                y: {
-                    min: CONFIG.chart.yAxisRange.min,
-                    max: CONFIG.chart.yAxisRange.max,
-                    title: {
-                        display: true,
-                        text: '加速度 (m/s²)'
-                    },
-                    grid: {
-                        color: 'rgba(0, 0, 0, 0.1)'
-                    }
-                }
-            },
-            elements: {
-                point: {
-                    radius: 0
-                }
-            }
+    // 水平線
+    for (let i = 0; i <= 10; i++) {
+        const y = (height / 10) * i;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+    }
+    
+    // 垂直線
+    for (let i = 0; i <= 10; i++) {
+        const x = (width / 10) * i;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+    }
+}
+
+// データライン描画
+function drawDataLine(data, color, width, height) {
+    if (data.length < 2) return;
+    
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    
+    for (let i = 0; i < data.length; i++) {
+        const x = (i / (data.length - 1)) * width;
+        const normalizedY = (data[i] - CONFIG.chart.yAxisRange.min) / 
+                           (CONFIG.chart.yAxisRange.max - CONFIG.chart.yAxisRange.min);
+        const y = height - (normalizedY * height);
+        
+        if (i === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
         }
-    });
+    }
+    
+    ctx.stroke();
+}
+
+// 軸ラベル描画
+function drawAxisLabels(width, height) {
+    ctx.fillStyle = '#666666';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'right';
+    
+    // Y軸ラベル
+    for (let i = 0; i <= 4; i++) {
+        const value = CONFIG.chart.yAxisRange.max - 
+                     (i * (CONFIG.chart.yAxisRange.max - CONFIG.chart.yAxisRange.min) / 4);
+        const y = (height / 4) * i + 4;
+        ctx.fillText(value.toFixed(0), width - 5, y);
+    }
 }
 
 // デバイスモーションイベントハンドラ
@@ -226,22 +265,18 @@ function handleDeviceMotion(event) {
     smoothedAcceleration.y = smoothAcceleration(smoothedAcceleration.y, acceleration.y || 0);
     smoothedAcceleration.z = smoothAcceleration(smoothedAcceleration.z, acceleration.z || 0);
     
-    // チャートにデータ追加
-    if (chart) {
-        chart.data.datasets[0].data.push({
-            x: now,
-            y: smoothedAcceleration.x
-        });
-        chart.data.datasets[1].data.push({
-            x: now,
-            y: smoothedAcceleration.y
-        });
-        chart.data.datasets[2].data.push({
-            x: now,
-            y: smoothedAcceleration.z
-        });
-        
-        chart.update('none'); // アニメーションなしで更新
+    // データ追加
+    dataPoints.x.push(smoothedAcceleration.x);
+    dataPoints.y.push(smoothedAcceleration.y);
+    dataPoints.z.push(smoothedAcceleration.z);
+    dataPoints.timestamps.push(now);
+    
+    // 古いデータを削除
+    if (dataPoints.x.length > CONFIG.chart.maxDataPoints) {
+        dataPoints.x.shift();
+        dataPoints.y.shift();
+        dataPoints.z.shift();
+        dataPoints.timestamps.shift();
     }
     
     // センサー情報更新
@@ -255,16 +290,14 @@ function smoothAcceleration(currentValue, newValue) {
 
 // チャートリセット
 function resetChart() {
-    if (chart) {
-        chart.data.datasets.forEach(dataset => {
-            dataset.data = [];
-        });
-        chart.update();
-        
-        // スムージング値もリセット
-        smoothedAcceleration = { x: 0, y: 0, z: 0 };
-        updateSensorInfo('チャートをリセットしました');
-    }
+    dataPoints.x = [];
+    dataPoints.y = [];
+    dataPoints.z = [];
+    dataPoints.timestamps = [];
+    
+    // スムージング値もリセット
+    smoothedAcceleration = { x: 0, y: 0, z: 0 };
+    updateSensorInfo('チャートをリセットしました');
 }
 
 // チャート一時停止/再開
@@ -291,6 +324,13 @@ function updateSensorInfo(message) {
     elements.sensorInfo.textContent = message;
 }
 
+// ウィンドウリサイズ時の処理
+window.addEventListener('resize', () => {
+    if (canvas) {
+        initCanvas();
+    }
+});
+
 // エラーハンドリング
 window.addEventListener('error', (event) => {
     console.error('JavaScript Error:', event.error);
@@ -299,8 +339,25 @@ window.addEventListener('error', (event) => {
 
 // ページ離脱時のクリーンアップ
 window.addEventListener('beforeunload', () => {
-    if (chart) {
-        chart.destroy();
-    }
+    cleanup();
+});
+
+// クリーンアップ関数
+function cleanup() {
     window.removeEventListener('devicemotion', handleDeviceMotion);
+    isChartActive = false;
+}
+
+// ページ可視性変更時の処理
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        // ページが非表示になった時の処理
+        if (isChartActive) {
+            isChartActive = false;
+            if (elements.pauseBtn) {
+                elements.pauseBtn.textContent = '▶️ 再開';
+            }
+            updateSensorInfo('一時停止中（ページ非表示）');
+        }
+    }
 });
