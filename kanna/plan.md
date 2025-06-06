@@ -1,108 +1,208 @@
-# 📱 端末傾きでキューブに視差を与える Three.js 実装ガイド
+# 📷 写真深度推定 & 立体視化 実装計画
 
-*(GitHub Pages / iPhone Safari 動作想定・DeviceOrientation API 使用)*
+*(スマホ撮影 → AI深度推定 → 傾き視差表示)*
 
 ---
 
 ## 1. ゴール
-- スマホを傾けると **画面中央のキューブ** が奥行きを持って僅かに位置シフトし、擬似的な立体視 (“パララックス”) を感じられるデモを作る。  
-- 視差量は端末の **β (前後チルト)** と **γ (左右チルト)** を入力に、カメラ位置を数 px 移動するだけの軽量処理で実現する。  
-- 元コード（`DeviceOrientationControls.js` + Three.js）を流用し、**パノラマビューア**部分をキューブ表示に置き換える。
+- スマートフォンで写真を撮影し、**JavaScript AI技術**で深度マップを推定する。  
+- 推定した深度情報を基に**複数レイヤーの3D表示**を作成し、端末傾きで立体視効果を確認できるビューアを実装する。  
+- 既存の傾き視差システムを拡張し、**実写画像の立体化**を実現する。
 
 ---
 
-## 2. 仕組みの全体像
+## 2. システム全体像
 ```
-┌────────────┐       β,γ       ┌──────────────┐
-│ Device      │ ───────────► │ ParallaxMapper│
-│ Orientation │               └──────────────┘
-└────────────┘                      │
-                                     ▼ (x,y平行移動)
-                                ┌──────────────┐
-                                │  Camera      │
-                                └──────────────┘
-                                     │(向きは固定)
-                                     ▼
-                                ┌──────────────┐
-                                │  Cube Mesh   │
-                                └──────────────┘
-```
-1. **傾き角取得**: `window.addEventListener('deviceorientation', …)` で αβγ を毎フレーム取得。  
-2. **角度→オフセット変換**: β, γ を *[-max, +max]* → *[-range, +range]* px にマッピング。  
-3. **カメラ移動**: `camera.position.set(ox, oy, baseZ)` を更新。視線 (`lookAt`) は常に原点へ。  
-4. キューブは原点に固定。結果として **近景 (キューブ) と背景 (canvas 背景色)** の相対座標が変化し、疑似パララックスが生じる。
-
----
-
-## 3. フォルダ構成（最小）
-```
-/docs
- ├ index.html          ← HTML 雛形
- ├ js/
- │  ├ three.min.js
- │  ├ DeviceOrientationControls.js
- │  └ app.js           ← 実装ロジック
- └ css/
-    └ style.css        ← 既存で OK
+┌─────────────┐    撮影    ┌──────────────┐    AI推定   ┌─────────────┐
+│ スマホカメラ │ ────────► │  Canvas画像   │ ─────────► │ 深度マップ   │
+└─────────────┘           └──────────────┘           └─────────────┘
+                                                           │
+                           ┌─────────────┐    3D変換      │
+                           │ レイヤー分割 │ ◄──────────────┘
+                           └─────────────┘
+                                  │
+                          ┌─────────────────┐
+                          │ Three.js表示     │
+                          │ - 前景プレーン    │
+                          │ - 中景プレーン    │
+                          │ - 背景プレーン    │
+                          └─────────────────┘
+                                  │
+                          ┌─────────────────┐
+                          │ 傾き視差効果     │
+                          │ (既存システム)   │
+                          └─────────────────┘
 ```
 
 ---
 
-## 4. 実装ステップ概要
+## 3. 実装フェーズ
 
-| 手順 | ポイント |
-|------|----------|
-| 1. **HTML 変更** | panoramaViewer 呼び出しを削除し、`<canvas id="scene">` のみ残す。`type="module"` で `app.js` を読み込み。 |
-| 2. **シーン初期化** | Three.js で `Scene`, `PerspectiveCamera`, `WebGLRenderer` を生成。カメラ基準 Z は 3〜4 (任意)。 |
-| 3. **キューブ追加** | `BoxGeometry(1,1,1)` + 単色 or テクスチャ `MeshStandardMaterial`。ライトは `AmbientLight` + `DirectionalLight`。 |
-| 4. **DeviceOrientation 許可** | iOS 13+ はボタンタップ内で `DeviceOrientationEvent.requestPermission()`。許可後 `deviceorientation` を購読。 |
-| 5. **パララックス計算** | ```js
-const MAX_DEG = 20;          // 傾き角何度で最大視差にするか
-const RANGE = 0.05;          // カメラをどれだけ動かすか (ワールド単位)
-function map(v, maxDeg) {
-  return THREE.MathUtils.clamp(v / maxDeg, -1, 1) * RANGE;
-}
-``` |
-| 6. **毎フレーム更新** | ```js
-function onOrient(e){
-  offsetX = map(e.gamma, MAX_DEG);
-  offsetY = map(e.beta,  MAX_DEG);
-}
-function animate(){
-  camera.position.x = offsetX;
-  camera.position.y = offsetY;
-  camera.lookAt(0,0,0);
-  renderer.render(scene, camera);
-  requestAnimationFrame(animate);
-}
-``` |
-| 7. **デスクトップ Fallback** | マウス移動で同様のオフセットを与える (`mousemove` → 比率変換)。 |
-| 8. **パフォーマンス** | - `renderer.setPixelRatio(window.devicePixelRatio)`<br>- `requestAnimationFrame` 内で resize チェック。 |
-| 9. **ビルド & デプロイ** | `/docs` を GitHub に push → Pages で公開。HTTPS 環境必須。 |
+### フェーズ1: カメラ撮影機能
+| 手順 | 実装内容 | 技術要素 |
+|------|----------|----------|
+| 1.1 | HTML UI拡張 | 撮影ボタン、プレビュー領域、進捗表示 |
+| 1.2 | カメラアクセス | `navigator.mediaDevices.getUserMedia()` |
+| 1.3 | 撮影処理 | Canvas描画、画像データ取得 |
+| 1.4 | 画像リサイズ | 512x512 または 1024x1024 に正規化 |
+
+### フェーズ2: AI深度推定
+| 手順 | 実装内容 | 技術要素 |
+|------|----------|----------|
+| 2.1 | AIモデル選定 | **MiDaS** (TensorFlow.js) または **DPT** |
+| 2.2 | モデル読み込み | CDN or ローカル配置 |
+| 2.3 | 前処理 | 画像正規化、テンソル変換 |
+| 2.4 | 推論実行 | GPU加速（WebGL）対応 |
+| 2.5 | 後処理 | 深度マップの正規化、可視化 |
+
+### フェーズ3: 3D立体化
+| 手順 | 実装内容 | 技術要素 |
+|------|----------|----------|
+| 3.1 | 深度レイヤー分割 | 深度値を3〜5段階に分類 |
+| 3.2 | マスク生成 | 各深度レベルのピクセルマスク作成 |
+| 3.3 | テクスチャ作成 | 元画像 × マスク = レイヤーテクスチャ |
+| 3.4 | プレーン配置 | Z座標を深度に応じて配置 |
+
+### フェーズ4: 視差表示統合
+| 手順 | 実装内容 | 技術要素 |
+|------|----------|----------|
+| 4.1 | シーン統合 | 既存キューブ表示を写真レイヤーに置換 |
+| 4.2 | 視差調整 | 深度差に応じた視差強度設定 |
+| 4.3 | UI切り替え | キューブモード ↔ 写真モード |
+| 4.4 | パフォーマンス最適化 | テクスチャ圧縮、LOD制御 |
 
 ---
 
-## 5. 調整パラメータ
-| 名前 | 役目 | 目安 |
+## 4. 技術スタック
+
+### AI深度推定
+```javascript
+// 候補1: MiDaS (軽量、実用的)
+import * as tf from '@tensorflow/tfjs';
+const model = await tf.loadGraphModel('midas-model-url');
+
+// 候補2: MediaPipe Depth (Google製)
+import { DepthEstimation } from '@mediapipe/depth_estimation';
+```
+
+### 3D表示
+```javascript
+// 深度レイヤー作成例
+const layers = [
+  { depth: 0.0, z: -2 },  // 背景
+  { depth: 0.5, z: -1 },  // 中景  
+  { depth: 1.0, z: 0 }    // 前景
+];
+
+layers.forEach(layer => {
+  const plane = new THREE.PlaneGeometry(2, 2);
+  const texture = createLayerTexture(image, depthMap, layer.depth);
+  const material = new THREE.MeshBasicMaterial({ 
+    map: texture, 
+    transparent: true 
+  });
+  const mesh = new THREE.Mesh(plane, material);
+  mesh.position.z = layer.z;
+  scene.add(mesh);
+});
+```
+
+---
+
+## 5. ファイル構成 (拡張後)
+```
+kanna/
+├── index.html               # UI拡張（撮影ボタン等）
+├── js/
+│   ├── app.js              # メインアプリ（既存）
+│   ├── camera.js           # 撮影機能
+│   ├── depth-ai.js         # AI深度推定
+│   ├── layer-generator.js  # 3Dレイヤー作成
+│   └── models/             # AIモデル格納
+│       └── midas.json
+├── css/
+│   └── style.css           # UI拡張用
+└── README.md               # 更新された使用方法
+```
+
+---
+
+## 6. UI/UX フロー
+
+### 基本操作フロー
+1. **モード選択**: キューブデモ / 写真撮影モード
+2. **撮影**: カメラ起動 → シャッター → プレビュー確認
+3. **AI処理**: 深度推定中... (進捗表示)
+4. **3D表示**: レイヤー化された立体写真を表示
+5. **傾き操作**: 端末を傾けて立体感を確認
+
+### UI要素
+```html
+<div id="mode-selector">
+  <button id="cube-mode">キューブデモ</button>
+  <button id="photo-mode">写真撮影</button>
+</div>
+
+<div id="camera-ui" class="hidden">
+  <video id="camera-preview"></video>
+  <button id="capture-btn">📷 撮影</button>
+</div>
+
+<div id="processing" class="hidden">
+  <div class="spinner"></div>
+  <p>AI深度推定中...</p>
+  <progress id="ai-progress" max="100"></progress>
+</div>
+```
+
+---
+
+## 7. パフォーマンス考慮
+
+### 最適化戦略
+| 項目 | 対策 | 目標 |
 |------|------|------|
-| `MAX_DEG` | これ以上傾けても視差が増えない上限角 | 15°〜25° |
-| `RANGE`   | カメラを原点からどれだけ動かすか (ワールド座標) | 0.03〜0.10 |
-| `baseZ`   | カメラ基準距離 | 3 (キューブサイズ 1 基準) |
+| AI推論速度 | WebGL加速、モデル量子化 | < 3秒 |
+| メモリ使用量 | テクスチャ圧縮、不要オブジェクト解放 | < 500MB |
+| レンダリング | LOD、視錐台カリング | 60fps |
+| 初期ロード | モデル遅延読み込み、CDN活用 | < 10秒 |
+
+### エラー処理
+- カメラアクセス失敗 → 画像ファイル選択にフォールバック
+- AI推論エラー → デフォルト深度マップ適用
+- GPU不足 → CPU推論または簡易表示
 
 ---
 
-## 6. 発展アイデア
-1. **視差二段階化**：キューブの前面に透明プレーンを追加し、奥行きの異なる 2 オブジェクトへ別々の `RANGE` を適用。  
-2. **深度フェード**：`camera.position.z` も小さく可変させると、傾きに応じてズームイン/アウトする演出が可能。  
-3. **物理連携**：端末を急激に振った場合は `gsap.to` 等でシェイクアニメを追加。  
+## 8. 発展アイデア
+
+### 高度な機能
+1. **リアルタイム深度推定**: 動画ストリームでの連続処理
+2. **セマンティック分割**: 人物・背景を個別レイヤー化
+3. **アニメーション**: 深度レイヤーの浮遊効果
+4. **ARコア連携**: 実環境深度との比較表示
+5. **共有機能**: 立体化した写真をWebRTCで共有
+
+### 機械学習強化
+- **転移学習**: ユーザー写真での深度推定精度向上
+- **エッジAI**: WebAssembly版モデルでオフライン動作
+- **マルチモーダル**: 音声ガイド付き立体視体験
 
 ---
 
-## 7. よくある落とし穴
-- `alpha` はコンパス回転なので視差には使わない。  
-- iOS は Safari **プライベートモード**だと `deviceorientation` が無効。通常モードでテスト。  
-- デバイス毎に β, γ の符号が逆転する場合があるため、デバッグ用にリアルタイム数値を HUD 表示すると調整が楽。
+## 9. 実装優先度
+
+### MVP (最小実用版)
+1. ✅ 既存傾き視差システム
+2. 🔄 カメラ撮影機能
+3. 🔄 MiDaS深度推定
+4. 🔄 3レイヤー立体表示
+
+### 拡張版
+- セマンティック分割
+- リアルタイム処理
+- 高精度深度推定
 
 ---
 
-以上が角度取得→キューブへの擬似視差付与の実装指針。コード詳細は `app.js` 内に 100 行前後で収まる想定。必要に応じてパラメータを調整し、リポジトリ README に適用方法を追記して運用してください。
+以上が写真撮影から立体視化までの包括的実装計画。段階的に機能追加し、各フェーズで動作確認を行いながら進める想定。
