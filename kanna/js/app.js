@@ -27,7 +27,9 @@ class ParallaxCube {
             beta: document.getElementById('beta'),
             gamma: document.getElementById('gamma'),
             offsetX: document.getElementById('offsetX'),
-            offsetY: document.getElementById('offsetY')
+            offsetY: document.getElementById('offsetY'),
+            angleX: document.getElementById('angleX'),
+            angleY: document.getElementById('angleY')
         };
         
         // デバイス対応チェック
@@ -134,12 +136,12 @@ class ParallaxCube {
         const beta = event.beta || 0;   // 前後の傾き（-180〜180）
         const gamma = event.gamma || 0; // 左右の傾き（-90〜90）
         
-        // 角度を正規化してオフセットに変換（左右を反転）
-        this.offsetX = this.mapAngleToOffset(-gamma, this.MAX_DEG);
+        // 角度を正規化してオフセットに変換
+        this.offsetX = this.mapAngleToOffset(gamma, this.MAX_DEG);
         this.offsetY = this.mapAngleToOffset(beta, this.MAX_DEG);
         
-        // カメラの角度も変更（側面を覗けるように、左右を反転）
-        this.angleY = this.mapAngleToOffset(-gamma, this.MAX_DEG) * this.MAX_ANGLE;
+        // カメラの角度も変更（側面を覗けるように）
+        this.angleY = -this.mapAngleToOffset(gamma, this.MAX_DEG) * this.MAX_ANGLE;
         this.angleX = -this.mapAngleToOffset(beta, this.MAX_DEG) * this.MAX_ANGLE;
         
         // デバッグ情報更新
@@ -172,7 +174,7 @@ class ParallaxCube {
                 this.offsetY = -normalizedY * this.RANGE; // Y軸を反転
                 
                 // カメラの角度も変更
-                this.angleY = normalizedX * this.MAX_ANGLE;
+                this.angleY = -normalizedX * this.MAX_ANGLE;
                 this.angleX = normalizedY * this.MAX_ANGLE;
                 
                 // デバッグ情報更新（マウス用）
@@ -192,6 +194,8 @@ class ParallaxCube {
         this.infoElements.gamma.textContent = gamma.toFixed(1);
         this.infoElements.offsetX.textContent = this.offsetX.toFixed(3);
         this.infoElements.offsetY.textContent = this.offsetY.toFixed(3);
+        this.infoElements.angleX.textContent = this.angleX.toFixed(1);
+        this.infoElements.angleY.textContent = this.angleY.toFixed(1);
     }
     
     onWindowResize() {
