@@ -112,6 +112,12 @@ function startAccelerationMonitoring() {
 
 // Chart.js 初期化
 function initChart() {
+    // 既存のチャートが存在する場合は破棄
+    if (chart) {
+        chart.destroy();
+        chart = null;
+    }
+    
     const ctx = document.getElementById('accelerationChart').getContext('2d');
     
     chart = new Chart(ctx, {
@@ -254,11 +260,11 @@ function resetChart() {
             dataset.data = [];
         });
         chart.update();
+        
+        // スムージング値もリセット
+        smoothedAcceleration = { x: 0, y: 0, z: 0 };
+        updateSensorInfo('チャートをリセットしました');
     }
-    
-    // スムージング値もリセット
-    smoothedAcceleration = { x: 0, y: 0, z: 0 };
-    updateSensorInfo('チャートをリセットしました');
 }
 
 // チャート一時停止/再開
