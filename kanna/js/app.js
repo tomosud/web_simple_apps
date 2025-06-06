@@ -3,13 +3,16 @@
 class ParallaxCube {
     constructor() {
         // 設定パラメータ
-        this.MAX_DEG = 20;    // 傾き角の最大値（度）
-        this.RANGE = 0.05;    // カメラ移動の最大幅（ワールド座標）
+        this.MAX_DEG = 30;    // 傾き角の最大値（度）
+        this.RANGE = 0.8;     // カメラ移動の最大幅（ワールド座標）
         this.BASE_Z = 3;      // カメラの基準Z距離
+        this.MAX_ANGLE = 15;  // カメラ角度の最大値（度）
         
         // 現在のオフセット値
         this.offsetX = 0;
         this.offsetY = 0;
+        this.angleX = 0;      // カメラのX軸回転角度
+        this.angleY = 0;      // カメラのY軸回転角度
         
         // Three.js オブジェクト
         this.scene = null;
@@ -74,20 +77,23 @@ class ParallaxCube {
         directionalLight.position.set(5, 5, 5);
         this.scene.add(directionalLight);
         
-        // キューブ作成
+        // キューブ作成（各面に異なる色）
         const geometry = new THREE.BoxGeometry(1, 1, 1);
-        const material = new THREE.MeshStandardMaterial({
-            color: 0x00ff88,
-            metalness: 0.3,
-            roughness: 0.4
-        });
+        const materials = [
+            new THREE.MeshStandardMaterial({ color: 0xff4444 }), // 右面 - 赤
+            new THREE.MeshStandardMaterial({ color: 0x44ff44 }), // 左面 - 緑
+            new THREE.MeshStandardMaterial({ color: 0x4444ff }), // 上面 - 青
+            new THREE.MeshStandardMaterial({ color: 0xffff44 }), // 下面 - 黄
+            new THREE.MeshStandardMaterial({ color: 0xff44ff }), // 前面 - マゼンタ
+            new THREE.MeshStandardMaterial({ color: 0x44ffff })  // 後面 - シアン
+        ];
         
-        this.cube = new THREE.Mesh(geometry, material);
+        this.cube = new THREE.Mesh(geometry, materials);
         this.scene.add(this.cube);
         
         // キューブにワイヤーフレームを追加
         const wireframe = new THREE.WireframeGeometry(geometry);
-        const wireframeMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.3, transparent: true });
+        const wireframeMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.2, transparent: true });
         const wireframeMesh = new THREE.LineSegments(wireframe, wireframeMaterial);
         this.cube.add(wireframeMesh);
     }
@@ -132,6 +138,10 @@ class ParallaxCube {
         this.offsetX = this.mapAngleToOffset(gamma, this.MAX_DEG);
         this.offsetY = this.mapAngleToOffset(beta, this.MAX_DEG);
         
+        // カメラの角度も変更（側面を覗けるように）
+        this.angleY = this.mapAngleToOffset(gamma, this.MAX_DEG) * this.MAX_ANGLE;
+        this.angleX = -this.mapAngleToOffset(beta, this.MAX_DEG) * this.MAX_ANGLE;
+        
         // デバッグ情報更新
         this.updateDebugInfo(beta, gamma);
     }
@@ -161,6 +171,10 @@ class ParallaxCube {
                 this.offsetX = normalizedX * this.RANGE;
                 this.offsetY = -normalizedY * this.RANGE; // Y軸を反転
                 
+                // カメラの角度も変更
+                this.angleY = normalizedX * this.MAX_ANGLE;
+                this.angleX = normalizedY * this.MAX_ANGLE;
+                
                 // デバッグ情報更新（マウス用）
                 this.updateDebugInfo(normalizedY * this.MAX_DEG, normalizedX * this.MAX_DEG);
             }
@@ -189,17 +203,17 @@ class ParallaxCube {
     animate() {
         requestAnimationFrame(() => this.animate());
         
-        // キューブを少し回転させる
-        this.cube.rotation.x += 0.005;
-        this.cube.rotation.y += 0.01;
+        // キューブの回転は停止（固定）
         
         // カメラ位置を更新（視差効果）
         this.camera.position.x = this.offsetX;
         this.camera.position.y = this.offsetY;
         this.camera.position.z = this.BASE_Z;
         
-        // 常に原点を見る
-        this.camera.lookAt(0, 0, 0);
+        // カメラの角度を更新（側面を覗けるように）
+        this.camera.rotation.x = THREE.MathUtils.degToRad(this.angleX);
+        this.camera.rotation.y = THREE.MathUtils.degToRad(this.angleY);
+        this.camera.rotation.z = 0;
         
         // レンダリング
         this.renderer.render(this.scene, this.camera);
