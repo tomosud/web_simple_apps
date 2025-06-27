@@ -111,7 +111,7 @@ class CostManager {
         const costs = this.getRandomCosts(brand);
         
         // ログ出力
-        console.log(`${brand} costs:`, costs);
+        // console.log(`${brand} costs:`, costs);
         
         return costs;
     }

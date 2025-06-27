@@ -43,7 +43,7 @@ class InputHandler {
             // スペースキーのみゲーム開始用として保持
             if (event.key === ' ') {
                 event.preventDefault();
-                if (!this.gameLogic.gameRunning) {
+                if (!this.gameLogic.gameRunning && !this.gameLogic.stageTransitioning && !this.gameLogic.isGameOver) {
                     this.gameLogic.startGame();
                 }
             }
@@ -55,14 +55,25 @@ class InputHandler {
         const x = clientX - rect.left;
         const y = clientY - rect.top;
         
+        // デバッグ情報を出力
+        console.log('Click detected:', {
+            gameRunning: this.gameLogic.gameRunning,
+            stageTransitioning: this.gameLogic.stageTransitioning,
+            isGameOver: this.gameLogic.isGameOver,
+            stage: this.gameLogic.stage
+        });
+        
         const laneIndex = this.getLaneFromPosition(x, y);
         
         if (laneIndex >= 0) {
-            if (!this.gameLogic.gameRunning) {
+            if (!this.gameLogic.gameRunning && !this.gameLogic.stageTransitioning && !this.gameLogic.isGameOver) {
+                console.log('Starting game due to click');
                 this.gameLogic.startGame();
-            } else {
+            } else if (this.gameLogic.gameRunning) {
                 // レーン全体でのタップを有効にする
                 this.gameLogic.handleInput(laneIndex);
+            } else {
+                console.log('Click ignored due to game state');
             }
         } else if (this.gameLogic.gameRunning) {
             // レーン外でもタップした場合、最も近いレーンを判定

@@ -85,7 +85,7 @@ class SoundManager {
             source.connect(this.effectGainNode);
             source.start(this.audioContext.currentTime);
             
-            console.log(`Playing ${brandName} sound for lane ${laneIndex}`);
+            // console.log(`Playing ${brandName} sound for lane ${laneIndex}`);
         } else {
             // フォールバック: 従来のヒット音
             this.playHitSound(laneIndex);

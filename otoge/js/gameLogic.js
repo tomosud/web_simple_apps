@@ -129,6 +129,7 @@ class GameLogic {
             z-index: 1000;
             text-align: center;
             animation: stageAnimation 3s ease-in-out;
+            pointer-events: none;
         `;
         stageDisplay.innerHTML = `ステージ${this.stage}日目!`;
         
@@ -404,7 +405,7 @@ class GameLogic {
             }
         }, 2000);
         
-        console.log(`${costItem.name} ${displayCost}円`);
+        // console.log(`${costItem.name} ${displayCost}円`);
     }
 
     getBrandKey(laneIndex) {
