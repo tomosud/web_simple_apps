@@ -100,7 +100,8 @@ class GameLogic {
     }
 
     createNote(laneIndex) {
-        const noteGeometry = new THREE.BoxGeometry(1.2, 0.5, 1.2);
+        // 板状のノートに変更（幅1.32、高さ0.1、奥行き1.32）
+        const noteGeometry = new THREE.BoxGeometry(1.32, 0.1, 1.32);
         
         // ブランドテクスチャを取得
         const brandTexture = this.sceneManager.getBrandTexture(laneIndex);
@@ -121,7 +122,7 @@ class GameLogic {
         
         const note = new THREE.Mesh(noteGeometry, noteMaterial);
         note.position.x = this.lanePositions[laneIndex];
-        note.position.y = 0.5;
+        note.position.y = 0.15; // 板状なので少し上げる
         note.position.z = -15;
         note.castShadow = true;
         

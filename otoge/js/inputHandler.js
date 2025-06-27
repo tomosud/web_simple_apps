@@ -95,16 +95,35 @@ class InputHandler {
     }
 
     getLaneFromPosition(x, y) {
-        const canvasWidth = this.canvas.clientWidth;
-        const laneWidth = canvasWidth / 4;
+        // 3D空間の実際のレーン位置を2D画面座標に投影
+        const lanePositions3D = [-2.4, -0.8, 0.8, 2.4]; // gameLogic.jsと同じ値
+        const screenLanePositions = [];
         
-        const laneIndex = Math.floor(x / laneWidth);
-        
-        if (laneIndex >= 0 && laneIndex < 4) {
-            return laneIndex;
+        // 各レーンの3D位置を画面座標に変換
+        for (let i = 0; i < 4; i++) {
+            const vector = new THREE.Vector3(lanePositions3D[i], 0, 1); // 判定エリアのz位置
+            vector.project(this.camera);
+            
+            // 正規化座標(-1~1)を画面座標に変換
+            const screenX = (vector.x + 1) * this.canvas.clientWidth / 2;
+            screenLanePositions.push(screenX);
         }
         
-        return -1;
+        // 最も近いレーンを見つける
+        let closestLane = -1;
+        let minDistance = Infinity;
+        
+        for (let i = 0; i < 4; i++) {
+            const distance = Math.abs(x - screenLanePositions[i]);
+            const tolerance = this.canvas.clientWidth * 0.08; // 画面幅の8%を許容範囲
+            
+            if (distance < minDistance && distance < tolerance) {
+                minDistance = distance;
+                closestLane = i;
+            }
+        }
+        
+        return closestLane;
     }
 
     // より正確な3D座標でのレーン判定（将来的に使用）
