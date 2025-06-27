@@ -11,12 +11,13 @@
         <canvas id="game-canvas"></canvas>
         <div id="ui-overlay">
             <div id="game-info">
-                <div id="score">スコア: 0</div>
+                <div id="score">残金: 30,000円</div>
                 <div id="stage">ステージ: 1</div>
                 <div id="lives">♥♥♥♥</div>
             </div>
             <div id="timer">30</div>
         </div>
+        <div id="cost-display-container"></div>
     </div>
 
     <!-- Three.js CDN -->
@@ -24,6 +25,7 @@
     
     <!-- Game Scripts -->
     <script src="js/scene.js"></script>
+    <script src="js/costManager.js"></script>
     <script src="js/gameLogic.js"></script>
     <script src="js/inputHandler.js"></script>
     <script src="js/soundManager.js"></script>

@@ -1,9 +1,10 @@
 class GameLogic {
-    constructor(scene, sceneManager) {
+    constructor(scene, sceneManager, costManager) {
         this.scene = scene;
         this.sceneManager = sceneManager;
+        this.costManager = costManager;
         this.notes = [];
-        this.score = 0;
+        this.money = 30000;
         this.timer = 30;
         this.stage = 1;
         this.lives = 4;
@@ -23,7 +24,7 @@ class GameLogic {
 
     startGame() {
         this.gameRunning = true;
-        this.score = 0;
+        this.money = this.costManager ? this.costManager.getInitialMoney() : 30000;
         this.timer = 30;
         this.lives = 4;
         this.stage = 1;
@@ -149,7 +150,7 @@ class GameLogic {
         gameOverUI.innerHTML = `
             <h1 style="font-size: 48px; margin-bottom: 20px; color: #ff4444;">GAME OVER</h1>
             <p style="font-size: 24px; margin-bottom: 10px;">ステージ: ${this.stage}</p>
-            <p style="font-size: 32px; margin-bottom: 40px; color: #ffff00;">スコア: ${this.score}</p>
+            <p style="font-size: 32px; margin-bottom: 40px; color: #ffff00;">残金: ${this.money.toLocaleString()}円</p>
             <button id="retry-button" style="
                 font-size: 24px;
                 padding: 15px 30px;
@@ -300,8 +301,9 @@ class GameLogic {
 
     hitNote(noteIndex, laneIndex) {
         this.removeNote(noteIndex);
-        this.score += 100;
-        this.updateUI();
+        
+        // 支出計算とUI更新
+        this.processCosts(laneIndex);
         
         // タッチフィードバックエフェクト
         this.createHitEffect(laneIndex);
@@ -311,6 +313,61 @@ class GameLogic {
             const brandName = this.getBrandName(laneIndex);
             window.soundManager.playBrandSound(laneIndex, brandName);
         }
+    }
+
+    processCosts(laneIndex) {
+        if (!this.costManager) return;
+        
+        const brandKey = this.getBrandKey(laneIndex);
+        const costs = this.costManager.getCostsForHit(brandKey);
+        
+        let totalCost = 0;
+        let delay = 0;
+        
+        for (const costItem of costs) {
+            totalCost += costItem.cost; // CSVの値は負数なので加算
+            
+            // 複数アイテムの場合、少しずつ遅らせて表示
+            setTimeout(() => {
+                this.showCostItem(costItem);
+            }, delay);
+            delay += 200; // 200ms間隔
+        }
+        
+        this.money += totalCost;
+        this.updateUI();
+    }
+
+    showCostItem(costItem) {
+        const displayCost = Math.abs(costItem.cost);
+        const container = document.getElementById('cost-display-container');
+        
+        if (!container) return;
+        
+        // 支出アイテム要素を作成
+        const costElement = document.createElement('div');
+        costElement.className = 'cost-item';
+        costElement.innerHTML = `
+            <div style="font-size: 18px; margin-bottom: 2px; color: #ffffff;">${costItem.name}</div>
+            <div style="font-size: 24px; color: #ff4444; font-weight: bold;">-${displayCost.toLocaleString()}円</div>
+        `;
+        
+        // コンテナに追加
+        container.appendChild(costElement);
+        
+        // 2秒後に削除
+        setTimeout(() => {
+            if (container.contains(costElement)) {
+                container.removeChild(costElement);
+            }
+        }, 2000);
+        
+        console.log(`${costItem.name} ${displayCost}円`);
+    }
+
+    getBrandKey(laneIndex) {
+        const brandKeys = ['peypey', 'suica', 'famima', 'line'];
+        return brandKeys[laneIndex] || 'famima';
     }
 
     missNote(laneIndex) {
@@ -375,7 +432,7 @@ class GameLogic {
         }
         
         if (scoreElement) {
-            scoreElement.textContent = `スコア: ${this.score}`;
+            scoreElement.textContent = `残金: ${this.money.toLocaleString()}円`;
         }
         
         if (stageElement) {

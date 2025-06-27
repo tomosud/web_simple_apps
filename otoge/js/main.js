@@ -18,8 +18,12 @@ class Game {
             this.soundManager = new SoundManager();
             window.soundManager = this.soundManager;
             
+            // コストマネージャーの初期化
+            this.costManager = new CostManager();
+            await this.costManager.init();
+            
             // ゲームロジックの初期化
-            this.gameLogic = new GameLogic(this.sceneManager.getScene(), this.sceneManager);
+            this.gameLogic = new GameLogic(this.sceneManager.getScene(), this.sceneManager, this.costManager);
             this.gameLogic.init();
             
             // 入力ハンドラーの初期化
