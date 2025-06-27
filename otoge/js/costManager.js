@@ -62,11 +62,18 @@ class CostManager {
         const items = [];
         
         for (const line of lines) {
-            const [name, cost] = line.split(',').map(item => item.trim());
-            if (name && cost) {
+            // 最後のカンマで分割して、価格部分を取得
+            const lastCommaIndex = line.lastIndexOf(',');
+            if (lastCommaIndex === -1) continue;
+            
+            const name = line.substring(0, lastCommaIndex).trim();
+            const costStr = line.substring(lastCommaIndex + 1).trim();
+            const cost = parseInt(costStr, 10);
+            
+            if (name && !isNaN(cost)) {
                 items.push({
                     name: name,
-                    cost: parseInt(cost, 10)
+                    cost: cost
                 });
             }
         }

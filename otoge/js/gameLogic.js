@@ -22,16 +22,29 @@ class GameLogic {
         this.updateUI();
     }
 
-    startGame() {
+    startGame(resetStage = true) {
         this.gameRunning = true;
         this.money = this.costManager ? this.costManager.getInitialMoney() : 30000;
         this.timer = 30;
         this.lives = 4;
-        this.stage = 1;
+        if (resetStage) {
+            this.stage = 1;
+        }
         this.isGameOver = false;
         
         // 既存のノートをすべて削除
         this.clearAllNotes();
+        
+        // 音楽を停止
+        if (window.soundManager && typeof window.soundManager.stopMusic === 'function') {
+            window.soundManager.stopMusic();
+        }
+        // フォールバック音楽も停止
+        if (window.currentAudio) {
+            window.currentAudio.pause();
+            window.currentAudio.currentTime = 0;
+            window.currentAudio = null;
+        }
         
         this.updateUI();
         this.startTimer();
@@ -72,6 +85,12 @@ class GameLogic {
         
         // 次のステージ（難易度上昇）
         this.stage++;
+        
+        // ステージ3でAI歌唱開始
+        if (this.stage === 3) {
+            this.showAISingingMessage();
+            return;
+        }
         this.lives = 4; // ライフ全回復
         this.noteSpeed += 0.02;
         if (this.noteInterval > 500) {
@@ -104,7 +123,7 @@ class GameLogic {
             text-align: center;
             animation: stageAnimation 3s ease-in-out;
         `;
-        stageDisplay.innerHTML = `Stage ${this.stage}!`;
+        stageDisplay.innerHTML = `ステージ${this.stage}日目!`;
         
         // CSS animation
         const style = document.createElement('style');
@@ -150,7 +169,7 @@ class GameLogic {
         gameOverUI.innerHTML = `
             <h1 style="font-size: 48px; margin-bottom: 20px; color: #ff4444;">GAME OVER</h1>
             <p style="font-size: 24px; margin-bottom: 10px;">ステージ: ${this.stage}</p>
-            <p style="font-size: 32px; margin-bottom: 40px; color: #ffff00;">残金: ${this.money.toLocaleString()}円</p>
+            <p style="font-size: 32px; margin-bottom: 40px; color: #ffff00;">今月の生活費: ${this.money.toLocaleString()}円</p>
             <button id="retry-button" style="
                 font-size: 24px;
                 padding: 15px 30px;
@@ -160,14 +179,14 @@ class GameLogic {
                 border-radius: 10px;
                 cursor: pointer;
                 box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-            ">もう一度プレイ</button>
+            ">もう一度人生をプレイ</button>
         `;
         
         document.body.appendChild(gameOverUI);
         
         document.getElementById('retry-button').addEventListener('click', () => {
             document.body.removeChild(gameOverUI);
-            this.startGame();
+            this.startGame(false); // ステージをリセットしない
         });
     }
 
@@ -344,12 +363,28 @@ class GameLogic {
         
         if (!container) return;
         
+        // 価格の表示形式を決定
+        let priceText, priceColor;
+        if (costItem.cost > 0) {
+            // プラス価格は青字で表示
+            priceText = `+${displayCost.toLocaleString()}円`;
+            priceColor = '#4444ff';
+        } else if (costItem.cost === 0) {
+            // 0円にはマイナスをつけない
+            priceText = '0円';
+            priceColor = '#888888';
+        } else {
+            // マイナス価格は赤字で表示
+            priceText = `-${displayCost.toLocaleString()}円`;
+            priceColor = '#ff4444';
+        }
+        
         // 支出アイテム要素を作成
         const costElement = document.createElement('div');
         costElement.className = 'cost-item';
         costElement.innerHTML = `
             <div style="font-size: 18px; margin-bottom: 2px; color: #ffffff;">${costItem.name}</div>
-            <div style="font-size: 24px; color: #ff4444; font-weight: bold;">-${displayCost.toLocaleString()}円</div>
+            <div style="font-size: 24px; color: ${priceColor}; font-weight: bold;">${priceText}</div>
         `;
         
         // コンテナに追加
@@ -428,21 +463,105 @@ class GameLogic {
         const livesElement = document.getElementById('lives');
         
         if (timerElement) {
-            timerElement.textContent = this.timer;
+            timerElement.textContent = `${this.timer}秒`;
         }
         
         if (scoreElement) {
-            scoreElement.textContent = `残金: ${this.money.toLocaleString()}円`;
+            scoreElement.textContent = `今月の生活費: ${this.money.toLocaleString()}円`;
         }
         
         if (stageElement) {
-            stageElement.textContent = `ステージ: ${this.stage}`;
+            stageElement.textContent = `ステージ${this.stage}日目`;
         }
         
         if (livesElement) {
             // ハートマークでライフを表現
             livesElement.textContent = '♥'.repeat(this.lives);
         }
+    }
+
+    showAISingingMessage() {
+        const aiSingingDisplay = document.createElement('div');
+        aiSingingDisplay.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 64px;
+            font-weight: bold;
+            color: #ff00ff;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.8);
+            z-index: 1000;
+            text-align: center;
+            animation: aiSingingAnimation 3s ease-in-out;
+            background: rgba(0,0,0,0.8);
+            padding: 40px;
+            border-radius: 20px;
+        `;
+        aiSingingDisplay.innerHTML = `AIが歌います。`;
+        
+        // CSS animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes aiSingingAnimation {
+                0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+                50% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+                100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        document.body.appendChild(aiSingingDisplay);
+        
+        // 3秒後に音楽開始とメッセージ削除
+        setTimeout(() => {
+            document.body.removeChild(aiSingingDisplay);
+            document.head.removeChild(style);
+            
+            // AI歌唱音楽を再生
+            console.log('SoundManager:', window.soundManager);
+            console.log('SoundManager methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(window.soundManager)));
+            
+            if (window.soundManager && typeof window.soundManager.playMusic === 'function') {
+                console.log('Attempting to play music...');
+                window.soundManager.playMusic('assets/music/7_30 through the ticket gateB.mp3')
+                    .catch(error => console.error('Music playback failed:', error));
+            } else {
+                console.error('SoundManager playMusic method not available - please reload page to get updated SoundManager');
+                // フォールバック: 単純なオーディオ要素を使用
+                const audio = new Audio('assets/music/7_30 through the ticket gateB.mp3');
+                audio.volume = 0.7;
+                audio.loop = true; // リピート再生
+                audio.play().catch(error => console.error('Audio fallback failed:', error));
+                
+                // オーディオ要素をグローバルに保存して停止できるようにする
+                window.currentAudio = audio;
+            }
+            
+            // ゲーム続行
+            this.continueToNextStage();
+        }, 3000);
+    }
+    
+    continueToNextStage() {
+        this.lives = 4; // ライフ全回復
+        this.noteSpeed += 0.02;
+        if (this.noteInterval > 500) {
+            this.noteInterval -= 50;
+        }
+        
+        // ステージ表示（通常のステージ遷移）
+        this.showStageTransition();
+        
+        // UIを更新してステージ番号を正しく表示
+        this.updateUI();
+        
+        setTimeout(() => {
+            this.timer = 30;
+            this.gameRunning = true;
+            this.updateUI();
+            this.startTimer();
+        }, 3000);
     }
 
     getLaneFromScreenPosition(x, y, camera, renderer) {

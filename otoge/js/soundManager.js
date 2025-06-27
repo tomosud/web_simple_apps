@@ -5,6 +5,8 @@ class SoundManager {
         this.brandSounds = {};
         this.bgmGainNode = null;
         this.effectGainNode = null;
+        this.musicGainNode = null;
+        this.currentMusic = null;
         this.init();
     }
 
@@ -15,12 +17,15 @@ class SoundManager {
             // ゲイン制御
             this.bgmGainNode = this.audioContext.createGain();
             this.effectGainNode = this.audioContext.createGain();
+            this.musicGainNode = this.audioContext.createGain();
             
             this.bgmGainNode.connect(this.audioContext.destination);
             this.effectGainNode.connect(this.audioContext.destination);
+            this.musicGainNode.connect(this.audioContext.destination);
             
             this.bgmGainNode.gain.value = 0.3;
             this.effectGainNode.gain.value = 0.5;
+            this.musicGainNode.gain.value = 0.7;
             
             this.createSounds();
             this.loadBrandSounds();
@@ -167,13 +172,49 @@ class SoundManager {
         }
     }
 
-    setVolume(bgmVolume = 0.3, effectVolume = 0.5) {
+    async playMusic(musicPath) {
+        if (!this.audioContext) return;
+        
+        // 既存の音楽を停止
+        this.stopMusic();
+        
+        try {
+            const response = await fetch(musicPath);
+            if (!response.ok) throw new Error(`Failed to load ${musicPath}`);
+            
+            const arrayBuffer = await response.arrayBuffer();
+            const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+            
+            this.currentMusic = this.audioContext.createBufferSource();
+            this.currentMusic.buffer = audioBuffer;
+            this.currentMusic.loop = true; // リピート再生
+            this.currentMusic.connect(this.musicGainNode);
+            this.currentMusic.start(this.audioContext.currentTime);
+            
+            console.log(`Playing music: ${musicPath}`);
+        } catch (error) {
+            console.error(`Failed to play music ${musicPath}:`, error);
+        }
+    }
+    
+    stopMusic() {
+        if (this.currentMusic) {
+            this.currentMusic.stop();
+            this.currentMusic = null;
+        }
+    }
+
+    setVolume(bgmVolume = 0.3, effectVolume = 0.5, musicVolume = 0.7) {
         if (this.bgmGainNode) {
             this.bgmGainNode.gain.value = bgmVolume;
         }
         
         if (this.effectGainNode) {
             this.effectGainNode.gain.value = effectVolume;
+        }
+        
+        if (this.musicGainNode) {
+            this.musicGainNode.gain.value = musicVolume;
         }
     }
 }

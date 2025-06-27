@@ -52,11 +52,16 @@ class SceneManager {
         const laneLength = 20;
         const laneSpacing = 1.6;
         
+        // グラデーションテクスチャを読み込み
+        const gradTexture = this.textureLoader.load('assets/textures/grad.png');
+        gradTexture.wrapS = THREE.RepeatWrapping;
+        gradTexture.wrapT = THREE.RepeatWrapping;
+        
         // 4つのラインを作成
         for (let i = 0; i < 4; i++) {
             const laneGeometry = new THREE.PlaneGeometry(laneWidth, laneLength);
             const laneMaterial = new THREE.MeshPhongMaterial({
-                color: 0x333333,
+                map: gradTexture,
                 transparent: true,
                 opacity: 0.8
             });
@@ -73,15 +78,15 @@ class SceneManager {
     }
 
     createJudgmentAreas() {
-        const areaWidth = 1.8;
-        const areaHeight = 1.5;
+        const areaWidth = 1.62; // 1.8の90%（10%縮小）
+        const areaHeight = 1.35; // 1.5の90%（10%縮小）
         const laneSpacing = 1.6;
         
         // 各ラインの下部に判定エリアを作成
         for (let i = 0; i < 4; i++) {
             const areaGeometry = new THREE.PlaneGeometry(areaWidth, areaHeight);
             const areaMaterial = new THREE.MeshPhongMaterial({
-                color: 0x00ff00,
+                color: 0x808080, // グレー色に変更
                 transparent: true,
                 opacity: 0.6
             });
@@ -92,17 +97,7 @@ class SceneManager {
             judgmentArea.position.y = 0.01;
             judgmentArea.position.z = 1;
             
-            // 境界線用のエッジ
-            const edges = new THREE.EdgesGeometry(areaGeometry);
-            const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
-            const wireframe = new THREE.LineSegments(edges, lineMaterial);
-            wireframe.rotation.x = -Math.PI / 2;
-            wireframe.position.x = (i - 1.5) * laneSpacing;
-            wireframe.position.y = 0.02;
-            wireframe.position.z = 1;
-            
             this.scene.add(judgmentArea);
-            this.scene.add(wireframe);
             this.judgmentAreas.push(judgmentArea);
         }
         

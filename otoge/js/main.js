@@ -85,13 +85,9 @@ class Game {
         `;
         
         message.innerHTML = `
-            <h2>音ゲー (otoge)</h2>
-            <p>上から降ってくるノートを<br>タイミングよくタップしよう！</p>
-            <p><strong>操作方法:</strong></p>
-            <p>判定エリアをタップ: ノートを叩く</p>
-            <p>スペースキー: ゲーム開始</p>
+            <h2>お金を使えば使うほど、人間が大きくなる。<br>今月もがんばろう！</h2>
             <br>
-            <p><strong>画面をタップしてゲーム開始</strong></p>
+            <p><strong>タップでスタート（人生）</strong></p>
         `;
         
         document.body.appendChild(message);
@@ -99,7 +95,8 @@ class Game {
         const startGame = () => {
             document.body.removeChild(message);
             this.gameLogic.startGame();
-            this.soundManager.startBGM();
+            // BGMを開始しない（ビート音を止める）
+            // this.soundManager.startBGM();
             document.removeEventListener('click', startGame);
             document.removeEventListener('touchstart', startGame);
         };
