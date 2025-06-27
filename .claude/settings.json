@@ -2,10 +2,17 @@
   "permissions": {
     "allow": [
       "Edit(*)",
-      "Write(*)"
+      "Write(*)",
+      "Read(*)",
+      "Delete(*)",
+      "Bash(*)",
+      "Task(*)"
+    ],
+    "deny": [
+      "Delete(/system/*)"
     ]
   },
   "codeExecution": "always",
-  "bashApproval": "always",
+  "bashApproval": "never",
   "fileOperations": "always"
 }

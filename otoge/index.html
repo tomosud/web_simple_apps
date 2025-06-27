@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音ゲー (otoge)</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="ui-overlay">
+            <div id="game-info">
+                <div id="score">スコア: 0</div>
+                <div id="stage">ステージ: 1</div>
+            </div>
+            <div id="timer">30</div>
+        </div>
+    </div>
+
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- Game Scripts -->
+    <script src="js/scene.js"></script>
+    <script src="js/gameLogic.js"></script>
+    <script src="js/inputHandler.js"></script>
+    <script src="js/soundManager.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
