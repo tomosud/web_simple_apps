@@ -189,6 +189,15 @@ class SoundManager {
             this.currentMusic.buffer = audioBuffer;
             this.currentMusic.loop = true; // リピート再生
             this.currentMusic.connect(this.musicGainNode);
+            
+            // 音楽が予期せず終了した場合の再開機能
+            this.currentMusic.onended = () => {
+                console.log('Music ended unexpectedly, restarting...');
+                if (this.currentMusic) {
+                    this.playMusic(musicPath);
+                }
+            };
+            
             this.currentMusic.start(this.audioContext.currentTime);
             
             console.log(`Playing music: ${musicPath}`);
@@ -199,6 +208,7 @@ class SoundManager {
     
     stopMusic() {
         if (this.currentMusic) {
+            this.currentMusic.onended = null; // イベントハンドラを削除
             this.currentMusic.stop();
             this.currentMusic = null;
         }

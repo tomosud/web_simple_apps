@@ -16,21 +16,24 @@ class GameLogic {
         this.judgmentTolerance = 1.5;
         this.lastNoteTime = 0;
         this.noteInterval = 1000;
+        this.stageTransitioning = false; // ステージ遷移中フラグ
     }
 
     init() {
         this.updateUI();
     }
 
-    startGame(resetStage = true) {
+    startGame() {
         this.gameRunning = true;
         this.money = this.costManager ? this.costManager.getInitialMoney() : 30000;
         this.timer = 30;
         this.lives = 4;
-        if (resetStage) {
-            this.stage = 1;
-        }
+        this.stage = 1;  // 常にステージ1からスタート（ゲームオーバー時のリスタート）
         this.isGameOver = false;
+        
+        // ゲームパラメータをリセット（ゲームオーバー後のリスタート用）
+        this.noteSpeed = 0.1;
+        this.noteInterval = 1000;
         
         // 既存のノートをすべて削除
         this.clearAllNotes();
@@ -82,6 +85,7 @@ class GameLogic {
 
     endGame() {
         this.gameRunning = false;
+        this.stageTransitioning = true; // ステージ遷移開始
         
         // 次のステージ（難易度上昇）
         this.stage++;
@@ -91,6 +95,8 @@ class GameLogic {
             this.showAISingingMessage();
             return;
         }
+        
+        // 通常のステージ遷移（ステージ4以降も含む）
         this.lives = 4; // ライフ全回復
         this.noteSpeed += 0.02;
         if (this.noteInterval > 500) {
@@ -103,6 +109,7 @@ class GameLogic {
         setTimeout(() => {
             this.timer = 30;
             this.gameRunning = true;
+            this.stageTransitioning = false; // ステージ遷移終了
             this.updateUI();
             this.startTimer();
         }, 3000);
@@ -186,7 +193,7 @@ class GameLogic {
         
         document.getElementById('retry-button').addEventListener('click', () => {
             document.body.removeChild(gameOverUI);
-            this.startGame(false); // ステージをリセットしない
+            this.startGame(); // ゲームオーバー後は常にステージ1からリスタート
         });
     }
 
@@ -291,7 +298,7 @@ class GameLogic {
     }
 
     handleInput(laneIndex) {
-        if (!this.gameRunning) return;
+        if (!this.gameRunning || this.stageTransitioning) return; // ステージ遷移中は入力を無視
         
         const hitNote = this.findNoteInJudgmentArea(laneIndex);
         
@@ -559,6 +566,7 @@ class GameLogic {
         setTimeout(() => {
             this.timer = 30;
             this.gameRunning = true;
+            this.stageTransitioning = false; // ステージ遷移終了
             this.updateUI();
             this.startTimer();
         }, 3000);

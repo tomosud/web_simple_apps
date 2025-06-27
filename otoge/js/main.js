@@ -6,6 +6,7 @@ class Game {
         this.soundManager = null;
         this.lastTime = 0;
         this.animationId = null;
+        this.gameStarted = false; // ゲーム開始フラグ
         this.init();
     }
 
@@ -93,6 +94,9 @@ class Game {
         document.body.appendChild(message);
         
         const startGame = () => {
+            if (this.gameStarted) return; // 既にゲームが開始されている場合は何もしない
+            
+            this.gameStarted = true;
             document.body.removeChild(message);
             this.gameLogic.startGame();
             // BGMを開始しない（ビート音を止める）
@@ -127,6 +131,8 @@ class Game {
     setupMobileAudio() {
         // モバイルでのオーディオ再生のための初期化
         const resumeAudio = async () => {
+            if (!this.gameStarted) return; // ゲーム開始前は何もしない
+            
             await this.soundManager.resumeAudioContext();
             document.removeEventListener('touchstart', resumeAudio);
             document.removeEventListener('click', resumeAudio);
