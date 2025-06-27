@@ -6,7 +6,9 @@ class GameLogic {
         this.score = 0;
         this.timer = 30;
         this.stage = 1;
+        this.lives = 4;
         this.gameRunning = false;
+        this.isGameOver = false;
         this.noteSpeed = 0.1;
         this.lanePositions = [-2.4, -0.8, 0.8, 2.4];
         this.judgmentAreaZ = 1;
@@ -23,6 +25,9 @@ class GameLogic {
         this.gameRunning = true;
         this.score = 0;
         this.timer = 30;
+        this.lives = 4;
+        this.stage = 1;
+        this.isGameOver = false;
         
         // 既存のノートをすべて削除
         this.clearAllNotes();
@@ -63,18 +68,120 @@ class GameLogic {
 
     endGame() {
         this.gameRunning = false;
-        alert(`ステージ ${this.stage} クリア！\nスコア: ${this.score}`);
         
         // 次のステージ（難易度上昇）
         this.stage++;
+        this.lives = 4; // ライフ全回復
         this.noteSpeed += 0.02;
         if (this.noteInterval > 500) {
             this.noteInterval -= 50;
         }
         
+        // ステージ表示
+        this.showStageTransition();
+        
         setTimeout(() => {
+            this.timer = 30;
+            this.gameRunning = true;
+            this.updateUI();
+            this.startTimer();
+        }, 3000);
+    }
+
+    showStageTransition() {
+        const stageDisplay = document.createElement('div');
+        stageDisplay.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            font-weight: bold;
+            color: #ffff00;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.8);
+            z-index: 1000;
+            text-align: center;
+            animation: stageAnimation 3s ease-in-out;
+        `;
+        stageDisplay.innerHTML = `Stage ${this.stage}!`;
+        
+        // CSS animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes stageAnimation {
+                0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+                50% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+                100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        document.body.appendChild(stageDisplay);
+        
+        setTimeout(() => {
+            document.body.removeChild(stageDisplay);
+            document.head.removeChild(style);
+        }, 3000);
+    }
+
+    gameOver() {
+        this.gameRunning = false;
+        this.isGameOver = true;
+        
+        const gameOverUI = document.createElement('div');
+        gameOverUI.id = 'game-over-ui';
+        gameOverUI.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            color: white;
+            font-family: Arial, sans-serif;
+        `;
+        
+        gameOverUI.innerHTML = `
+            <h1 style="font-size: 48px; margin-bottom: 20px; color: #ff4444;">GAME OVER</h1>
+            <p style="font-size: 24px; margin-bottom: 10px;">ステージ: ${this.stage}</p>
+            <p style="font-size: 32px; margin-bottom: 40px; color: #ffff00;">スコア: ${this.score}</p>
+            <button id="retry-button" style="
+                font-size: 24px;
+                padding: 15px 30px;
+                background: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 10px;
+                cursor: pointer;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            ">もう一度プレイ</button>
+        `;
+        
+        document.body.appendChild(gameOverUI);
+        
+        document.getElementById('retry-button').addEventListener('click', () => {
+            document.body.removeChild(gameOverUI);
             this.startGame();
-        }, 2000);
+        });
+    }
+
+    missedNote(laneIndex) {
+        this.lives--;
+        this.updateUI();
+        
+        if (this.lives <= 0) {
+            this.gameOver();
+        }
+        
+        // ミスサウンド再生
+        if (window.soundManager) {
+            window.soundManager.playMissSound();
+        }
     }
 
     update(deltaTime) {
@@ -151,8 +258,9 @@ class GameLogic {
             const note = this.notes[i];
             note.position.z += note.userData.speed;
             
-            // 判定エリアを通過した場合（失敗）
+            // 判定エリアを通過した場合（ミス・ライフ減少）
             if (note.position.z > this.judgmentAreaZ + 2) {
+                this.missedNote(note.userData.laneIndex);
                 this.removeNote(i);
             }
         }
@@ -260,6 +368,7 @@ class GameLogic {
         const timerElement = document.getElementById('timer');
         const scoreElement = document.getElementById('score');
         const stageElement = document.getElementById('stage');
+        const livesElement = document.getElementById('lives');
         
         if (timerElement) {
             timerElement.textContent = this.timer;
@@ -271,6 +380,11 @@ class GameLogic {
         
         if (stageElement) {
             stageElement.textContent = `ステージ: ${this.stage}`;
+        }
+        
+        if (livesElement) {
+            // ハートマークでライフを表現
+            livesElement.textContent = '♥'.repeat(this.lives);
         }
     }
 
