@@ -2,6 +2,7 @@ class SoundManager {
     constructor() {
         this.audioContext = null;
         this.sounds = {};
+        this.brandSounds = {};
         this.bgmGainNode = null;
         this.effectGainNode = null;
         this.init();
@@ -22,6 +23,7 @@ class SoundManager {
             this.effectGainNode.gain.value = 0.5;
             
             this.createSounds();
+            this.loadBrandSounds();
         } catch (error) {
             console.warn('Web Audio API not supported:', error);
         }
@@ -36,6 +38,53 @@ class SoundManager {
         
         // BGMのビート音
         this.bgmFrequency = 80;
+    }
+
+    loadBrandSounds() {
+        const brandSoundPaths = {
+            0: 'assets/sounds/paypay.wav',    // PayPay
+            1: 'assets/sounds/suica.wav',     // Suica
+            2: 'assets/sounds/famima.wav',    // ファミリーマート
+            3: 'assets/sounds/line.wav'       // LINE
+        };
+
+        for (const [laneIndex, soundPath] of Object.entries(brandSoundPaths)) {
+            fetch(soundPath)
+                .then(response => {
+                    if (response.ok) {
+                        return response.arrayBuffer();
+                    }
+                    throw new Error(`Failed to load ${soundPath}`);
+                })
+                .then(arrayBuffer => {
+                    return this.audioContext.decodeAudioData(arrayBuffer);
+                })
+                .then(audioBuffer => {
+                    this.brandSounds[laneIndex] = audioBuffer;
+                    console.log(`Loaded brand sound for lane ${laneIndex}: ${soundPath}`);
+                })
+                .catch(error => {
+                    console.warn(`Failed to load brand sound ${soundPath}:`, error);
+                    this.brandSounds[laneIndex] = null;
+                });
+        }
+    }
+
+    playBrandSound(laneIndex, brandName) {
+        const audioBuffer = this.brandSounds[laneIndex];
+        
+        if (audioBuffer && this.audioContext) {
+            // ブランドサウンドを再生
+            const source = this.audioContext.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(this.effectGainNode);
+            source.start(this.audioContext.currentTime);
+            
+            console.log(`Playing ${brandName} sound for lane ${laneIndex}`);
+        } else {
+            // フォールバック: 従来のヒット音
+            this.playHitSound(laneIndex);
+        }
     }
 
     playHitSound(laneIndex) {

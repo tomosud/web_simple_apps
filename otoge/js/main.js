@@ -19,7 +19,7 @@ class Game {
             window.soundManager = this.soundManager;
             
             // ゲームロジックの初期化
-            this.gameLogic = new GameLogic(this.sceneManager.getScene());
+            this.gameLogic = new GameLogic(this.sceneManager.getScene(), this.sceneManager);
             this.gameLogic.init();
             
             // 入力ハンドラーの初期化

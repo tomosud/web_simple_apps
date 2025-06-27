@@ -5,6 +5,8 @@ class SceneManager {
         this.renderer = null;
         this.lanes = [];
         this.judgmentAreas = [];
+        this.textureLoader = null;
+        this.brandTextures = {};
         this.init();
     }
 
@@ -12,6 +14,7 @@ class SceneManager {
         this.createScene();
         this.createCamera();
         this.createRenderer();
+        this.initTextureLoader();
         this.createLanes();
         this.createJudgmentAreas();
         this.setupLighting();
@@ -45,9 +48,9 @@ class SceneManager {
     }
 
     createLanes() {
-        const laneWidth = 1.5;
+        const laneWidth = 1.2;
         const laneLength = 20;
-        const laneSpacing = 2;
+        const laneSpacing = 1.6;
         
         // 4つのラインを作成
         for (let i = 0; i < 4; i++) {
@@ -70,9 +73,9 @@ class SceneManager {
     }
 
     createJudgmentAreas() {
-        const areaWidth = 2.2;
+        const areaWidth = 1.8;
         const areaHeight = 1.5;
-        const laneSpacing = 2;
+        const laneSpacing = 1.6;
         
         // 各ラインの下部に判定エリアを作成
         for (let i = 0; i < 4; i++) {
@@ -108,7 +111,7 @@ class SceneManager {
     }
 
     createJudgmentLine() {
-        const lineGeometry = new THREE.PlaneGeometry(10, 0.1);
+        const lineGeometry = new THREE.PlaneGeometry(7, 0.1);
         const lineMaterial = new THREE.MeshBasicMaterial({
             color: 0xff0000,
             transparent: true,
@@ -122,6 +125,43 @@ class SceneManager {
         judgmentLine.position.z = 1;
         
         this.scene.add(judgmentLine);
+    }
+
+    initTextureLoader() {
+        this.textureLoader = new THREE.TextureLoader();
+        this.loadBrandTextures();
+    }
+
+    loadBrandTextures() {
+        const brandTexturePaths = {
+            0: 'assets/textures/peipei.png',    // PayPay
+            1: 'assets/textures/suica.png',     // Suica
+            2: 'assets/textures/famima.png',    // ファミリーマート
+            3: 'assets/textures/line.png'       // LINE
+        };
+
+        for (const [laneIndex, texturePath] of Object.entries(brandTexturePaths)) {
+            this.textureLoader.load(
+                texturePath,
+                (texture) => {
+                    // テクスチャが正常に読み込まれた場合
+                    this.brandTextures[laneIndex] = texture;
+                    console.log(`Loaded texture for lane ${laneIndex}: ${texturePath}`);
+                },
+                (progress) => {
+                    // 読み込み進行状況（オプション）
+                },
+                (error) => {
+                    // テクスチャ読み込みに失敗した場合、フォールバック
+                    console.warn(`Failed to load texture ${texturePath}, using fallback`);
+                    this.brandTextures[laneIndex] = null;
+                }
+            );
+        }
+    }
+
+    getBrandTexture(laneIndex) {
+        return this.brandTextures[laneIndex] || null;
     }
 
     setupLighting() {

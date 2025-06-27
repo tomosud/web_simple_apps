@@ -1,13 +1,14 @@
 class GameLogic {
-    constructor(scene) {
+    constructor(scene, sceneManager) {
         this.scene = scene;
+        this.sceneManager = sceneManager;
         this.notes = [];
         this.score = 0;
         this.timer = 30;
         this.stage = 1;
         this.gameRunning = false;
         this.noteSpeed = 0.1;
-        this.lanePositions = [-3, -1, 1, 3];
+        this.lanePositions = [-2.4, -0.8, 0.8, 2.4];
         this.judgmentAreaZ = 1;
         this.judgmentTolerance = 1.5;
         this.lastNoteTime = 0;
@@ -99,10 +100,24 @@ class GameLogic {
     }
 
     createNote(laneIndex) {
-        const noteGeometry = new THREE.BoxGeometry(1.5, 0.5, 1.5);
-        const noteMaterial = new THREE.MeshPhongMaterial({
-            color: this.getNoteColor(laneIndex)
-        });
+        const noteGeometry = new THREE.BoxGeometry(1.2, 0.5, 1.2);
+        
+        // ブランドテクスチャを取得
+        const brandTexture = this.sceneManager.getBrandTexture(laneIndex);
+        
+        let noteMaterial;
+        if (brandTexture) {
+            // テクスチャが利用可能な場合
+            noteMaterial = new THREE.MeshPhongMaterial({
+                map: brandTexture,
+                transparent: true
+            });
+        } else {
+            // フォールバック: 従来の色ベース
+            noteMaterial = new THREE.MeshPhongMaterial({
+                color: this.getNoteColor(laneIndex)
+            });
+        }
         
         const note = new THREE.Mesh(noteGeometry, noteMaterial);
         note.position.x = this.lanePositions[laneIndex];
@@ -112,11 +127,17 @@ class GameLogic {
         
         note.userData = {
             laneIndex: laneIndex,
-            speed: this.noteSpeed
+            speed: this.noteSpeed,
+            brand: this.getBrandName(laneIndex)
         };
         
         this.scene.add(note);
         this.notes.push(note);
+    }
+
+    getBrandName(laneIndex) {
+        const brandNames = ['PayPay', 'Suica', 'ファミリーマート', 'LINE'];
+        return brandNames[laneIndex] || 'Unknown';
     }
 
     getNoteColor(laneIndex) {
@@ -176,9 +197,10 @@ class GameLogic {
         // タッチフィードバックエフェクト
         this.createHitEffect(laneIndex);
         
-        // サウンド再生
+        // ブランドサウンド再生
         if (window.soundManager) {
-            window.soundManager.playHitSound(laneIndex);
+            const brandName = this.getBrandName(laneIndex);
+            window.soundManager.playBrandSound(laneIndex, brandName);
         }
     }
 
@@ -262,9 +284,9 @@ class GameLogic {
         // 判定エリアとの交差を計算
         for (let i = 0; i < this.lanePositions.length; i++) {
             const laneX = this.lanePositions[i];
-            const distance = Math.abs(mouse.x * 8 - laneX);
+            const distance = Math.abs(mouse.x * 6 - laneX);
             
-            if (distance < 2.2) {
+            if (distance < 1.8) {
                 return i;
             }
         }
