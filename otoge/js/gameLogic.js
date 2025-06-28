@@ -12,7 +12,7 @@ class GameLogic {
         this.isGameOver = false;
         this.noteSpeed = 0.1;
         this.lanePositions = [-2.4, -0.8, 0.8, 2.4];
-        this.judgmentAreaZ = 1;
+        this.judgmentAreaZ = 2.5;
         this.judgmentTolerance = 1.5;
         this.lastNoteTime = 0;
         this.noteInterval = 1000;
