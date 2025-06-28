@@ -153,13 +153,19 @@ class SubtitleManager {
         const currentTime = Date.now() - this.startTime - 500; // 0.5秒遅らせる
         let foundActiveSubtitle = false;
         
+        // 字幕の総時間を計算（最後の字幕の終了時間）
+        const totalDuration = this.subtitles.length > 0 ? 
+            Math.max(...this.subtitles.map(s => s.endTime)) : 0;
+        
+        // 音楽がリピートしている場合の時間を計算
+        const loopedTime = totalDuration > 0 ? currentTime % totalDuration : currentTime;
         
         // VTTで設定された時間通りに表示する
         for (let i = 0; i < this.subtitles.length; i++) {
             const subtitle = this.subtitles[i];
             
-            // 設定された時間範囲内かチェック
-            if (currentTime >= subtitle.startTime && currentTime <= subtitle.endTime) {
+            // 設定された時間範囲内かチェック（リピート時間を使用）
+            if (loopedTime >= subtitle.startTime && loopedTime <= subtitle.endTime) {
                 // アクティブな字幕が見つかった
                 if (this.currentSubtitleIndex !== i) {
                     this.currentSubtitleIndex = i;

@@ -431,9 +431,14 @@ class GameLogic {
         // 支出アイテム要素を作成
         const costElement = document.createElement('div');
         costElement.className = 'cost-item';
+        // スマホ縦画面かどうかを判定
+        const isMobile = window.innerWidth / window.innerHeight < 1.0;
+        const descriptionFontSize = isMobile ? '12.6px' : '18px'; // 70%縮小
+        const priceFontSize = isMobile ? '16.8px' : '24px'; // 70%縮小
+        
         costElement.innerHTML = `
-            <div style="font-size: 18px; margin-bottom: 2px; color: #ffffff;">${costItem.name}</div>
-            <div style="font-size: 24px; color: ${priceColor}; font-weight: bold;">${priceText}</div>
+            <div style="font-size: ${descriptionFontSize}; margin-bottom: 2px; color: #ffffff;">${costItem.name}</div>
+            <div style="font-size: ${priceFontSize}; color: ${priceColor}; font-weight: bold;">${priceText}</div>
         `;
         
         // コンテナに追加

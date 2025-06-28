@@ -167,7 +167,7 @@ body {
     
     /* スマートフォン用字幕スタイル調整 */
     #subtitle-container {
-        font-size: 27px !important;
+        font-size: 25.2px !important; /* 70%縮小 */
         bottom: 40px !important;
         width: 95% !important;
         padding: 12px 20px !important;
