@@ -102,13 +102,6 @@ class SubtitleManager {
                 } else {
                     currentSubtitle.text = line;
                 }
-                
-                // 次の行が空行またはタイムコードまたはファイル終端の場合、字幕を完了
-                const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : '';
-                if (i + 1 >= lines.length || !nextLine || nextLine.includes('-->')) {
-                    this.subtitles.push(currentSubtitle);
-                    currentSubtitle = null;
-                }
             }
         }
         
