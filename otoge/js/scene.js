@@ -28,13 +28,16 @@ class SceneManager {
 
     createCamera() {
         const aspect = window.innerWidth / window.innerHeight;
-        this.camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+        // スマートフォン縦画面時は画角を21%狭くして要素を大きく表示
+        const fov = aspect < 1.0 ? 59.25 : 75;
+        this.camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, 1000);
         
         // アスペクト比に応じてカメラ位置を調整（スマートフォン対応）
         if (aspect < 1.0) {
-            // スマートフォン縦画面: UI要素が見えるよう高い位置から下向きに
-            this.camera.position.set(0, 11, 6);
-            this.camera.lookAt(0, -1.5, -2);
+            // スマートフォン縦画面: より引いた視点 + 3度下向きに
+            this.camera.position.set(0, 8, 5);
+            this.camera.lookAt(0, 1.8, -2);
+            this.camera.rotation.x -= Math.PI / 60; // 3度下向き
         } else {
             // PC・タブレット横画面: 従来の視点
             this.camera.position.set(0, 6, 4);
@@ -102,7 +105,7 @@ class SceneManager {
             judgmentArea.rotation.x = -Math.PI / 2;
             judgmentArea.position.x = (i - 1.5) * laneSpacing;
             judgmentArea.position.y = 0.01;
-            judgmentArea.position.z = 2.5;
+            judgmentArea.position.z = 1;
             
             this.scene.add(judgmentArea);
             this.judgmentAreas.push(judgmentArea);
@@ -124,7 +127,7 @@ class SceneManager {
         judgmentLine.rotation.x = -Math.PI / 2;
         judgmentLine.position.x = 0;
         judgmentLine.position.y = 0.03;
-        judgmentLine.position.z = 2.5;
+        judgmentLine.position.z = 1;
         
         this.scene.add(judgmentLine);
     }
@@ -187,9 +190,10 @@ class SceneManager {
             
             // リサイズ時もカメラ位置を調整
             if (aspect < 1.0) {
-                // スマートフォン縦画面: UI要素が見えるよう高い位置から下向きに
-                this.camera.position.set(0, 11, 6);
-                this.camera.lookAt(0, -1.5, -2);
+                // スマートフォン縦画面: より引いた視点 + 3度下向きに
+                this.camera.position.set(0, 8, 5);
+                this.camera.lookAt(0, 1.8, -2);
+                this.camera.rotation.x -= Math.PI / 60; // 3度下向き
             } else {
                 // PC・タブレット横画面: 従来の視点
                 this.camera.position.set(0, 6, 4);
