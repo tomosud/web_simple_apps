@@ -350,15 +350,26 @@ class GameLogic {
         
         let totalCost = 0;
         let delay = 0;
+        let hasPositiveCost = false;
         
         for (const costItem of costs) {
             totalCost += costItem.cost; // CSVの値は負数なので加算
+            
+            // プラス金額があるかチェック
+            if (costItem.cost > 0) {
+                hasPositiveCost = true;
+            }
             
             // 複数アイテムの場合、少しずつ遅らせて表示
             setTimeout(() => {
                 this.showCostItem(costItem);
             }, delay);
             delay += 200; // 200ms間隔
+        }
+        
+        // プラス金額時にハート回復
+        if (hasPositiveCost && this.lives < 4) {
+            this.lives = 4;
         }
         
         this.money += totalCost;

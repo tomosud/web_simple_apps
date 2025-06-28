@@ -30,9 +30,16 @@ class SceneManager {
         const aspect = window.innerWidth / window.innerHeight;
         this.camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
         
-        // 斜め上から見下ろす視点（上部空白を減らす）
-        this.camera.position.set(0, 6, 4);
-        this.camera.lookAt(0, 0, -2);
+        // アスペクト比に応じてカメラ位置を調整（スマートフォン対応）
+        if (aspect < 1.0) {
+            // スマートフォン縦画面: より引いた視点
+            this.camera.position.set(0, 8, 5);
+            this.camera.lookAt(0, 0, -2);
+        } else {
+            // PC・タブレット横画面: 従来の視点
+            this.camera.position.set(0, 6, 4);
+            this.camera.lookAt(0, 0, -2);
+        }
     }
 
     createRenderer() {
@@ -177,6 +184,18 @@ class SceneManager {
         window.addEventListener('resize', () => {
             const aspect = window.innerWidth / window.innerHeight;
             this.camera.aspect = aspect;
+            
+            // リサイズ時もカメラ位置を調整
+            if (aspect < 1.0) {
+                // スマートフォン縦画面: より引いた視点
+                this.camera.position.set(0, 8, 5);
+                this.camera.lookAt(0, 0, -2);
+            } else {
+                // PC・タブレット横画面: 従来の視点
+                this.camera.position.set(0, 6, 4);
+                this.camera.lookAt(0, 0, -2);
+            }
+            
             this.camera.updateProjectionMatrix();
             this.renderer.setSize(window.innerWidth, window.innerHeight);
         });
