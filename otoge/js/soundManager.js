@@ -105,6 +105,78 @@ class SoundManager {
         this.playNoise(0.1, this.effectGainNode);
     }
 
+    playMistapSound() {
+        
+        // AudioContextが停止している場合は再開を試行
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+            this.audioContext.resume().then(() => {
+                this.createMistapSound();
+            }).catch(err => {
+                this.fallbackMistapSound();
+            });
+        } else if (this.audioContext) {
+            this.createMistapSound();
+        } else {
+            this.fallbackMistapSound();
+        }
+    }
+
+    createMistapSound() {
+        try {
+            
+            // より低く、大きく、嫌な音にする
+            const oscillator = this.audioContext.createOscillator();
+            const envelope = this.audioContext.createGain();
+            
+            // 低い周波数の不協和音
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.setValueAtTime(80, this.audioContext.currentTime);
+            oscillator.frequency.linearRampToValueAtTime(60, this.audioContext.currentTime + 0.3);
+            
+            // より大きな音量で長めの持続
+            envelope.gain.setValueAtTime(0, this.audioContext.currentTime);
+            envelope.gain.linearRampToValueAtTime(1.0, this.audioContext.currentTime + 0.02); // 最大音量
+            envelope.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + 0.4);
+            
+            oscillator.connect(envelope);
+            envelope.connect(this.effectGainNode);
+            
+            oscillator.start(this.audioContext.currentTime);
+            oscillator.stop(this.audioContext.currentTime + 0.4);
+        } catch (error) {
+            this.fallbackMistapSound();
+        }
+    }
+
+    fallbackMistapSound() {
+        // HTMLAudioElementを使ったフォールバック
+        try {
+            // データURIを使って音を生成
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const sampleRate = audioContext.sampleRate;
+            const duration = 0.4;
+            const samples = sampleRate * duration;
+            
+            const buffer = audioContext.createBuffer(1, samples, sampleRate);
+            const data = buffer.getChannelData(0);
+            
+            // ノイズとトーンの組み合わせ
+            for (let i = 0; i < samples; i++) {
+                const t = i / sampleRate;
+                const noise = (Math.random() - 0.5) * 0.3;
+                const tone = Math.sin(2 * Math.PI * (80 - t * 20) * t) * 0.7;
+                data[i] = (noise + tone) * Math.max(0, 1 - t * 2.5);
+            }
+            
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+            source.start();
+        } catch (error) {
+            // 無視
+        }
+    }
+
     playTone(frequency, duration, waveType = 'sine', gainNode = null) {
         if (!this.audioContext) return;
         

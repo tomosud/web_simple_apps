@@ -199,16 +199,28 @@ class GameLogic {
     }
 
     missedNote(laneIndex) {
+        
         this.lives--;
+        
+        // Miss!表示
+        this.showMissText();
+        
+        // 背景の赤フラッシュ
+        this.flashRedBackground();
+        
+        // ライフ点滅アニメーション
+        this.animateLifeBlink();
+        
+        // ミスタップサウンド再生（従来のミスサウンドではなく、新しいミスタップサウンドを使用）
+        if (window.soundManager) {
+            window.soundManager.playMistapSound();
+        }
+        
         this.updateUI();
+        
         
         if (this.lives <= 0) {
             this.gameOver();
-        }
-        
-        // ミスサウンド再生
-        if (window.soundManager) {
-            window.soundManager.playMissSound();
         }
     }
 
@@ -306,7 +318,8 @@ class GameLogic {
         if (hitNote !== null) {
             this.hitNote(hitNote, laneIndex);
         } else {
-            this.missNote(laneIndex);
+            // ノートが判定エリアにない場合はミスタップとして処理
+            this.handleMistap();
         }
     }
 
@@ -429,6 +442,122 @@ class GameLogic {
         if (window.soundManager) {
             window.soundManager.playMissSound();
         }
+    }
+
+    handleMistap() {
+        
+        // ライフ減少
+        this.lives--;
+        
+        // Miss!表示
+        this.showMissText();
+        
+        // ライフ点滅アニメーション
+        this.animateLifeBlink();
+        
+        // 背景の赤フラッシュ
+        this.flashRedBackground();
+        
+        // ミスタップサウンド再生
+        if (window.soundManager) {
+            window.soundManager.playMistapSound();
+        }
+        
+        // UIを更新
+        this.updateUI();
+        
+        
+        // ゲームオーバー判定
+        if (this.lives <= 0) {
+            this.gameOver();
+        }
+    }
+
+    showMissText() {
+        
+        const missElement = document.createElement('div');
+        missElement.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 72px;
+            font-weight: bold;
+            color: #ff0000;
+            text-shadow: 4px 4px 8px rgba(0,0,0,0.8);
+            z-index: 2000;
+            text-align: center;
+            font-family: Arial, sans-serif;
+            pointer-events: none;
+            animation: missAnimation 0.8s ease-out;
+        `;
+        missElement.textContent = 'Miss!';
+        
+        // CSS animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes missAnimation {
+                0% { 
+                    opacity: 0; 
+                    transform: translate(-50%, -50%) scale(0.5); 
+                }
+                30% { 
+                    opacity: 1; 
+                    transform: translate(-50%, -50%) scale(1.2); 
+                }
+                100% { 
+                    opacity: 0; 
+                    transform: translate(-50%, -50%) scale(1); 
+                }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        document.body.appendChild(missElement);
+        
+        // 800ms後に削除
+        setTimeout(() => {
+            if (document.body.contains(missElement)) {
+                document.body.removeChild(missElement);
+            }
+            if (document.head.contains(style)) {
+                document.head.removeChild(style);
+            }
+        }, 800);
+    }
+
+    animateLifeBlink() {
+        const livesElement = document.getElementById('lives');
+        if (!livesElement) return;
+        
+        // 点滅アニメーション
+        let blinkCount = 0;
+        const maxBlinks = 6; // 3回点滅（表示・非表示の組み合わせ）
+        
+        const blinkInterval = setInterval(() => {
+            livesElement.style.opacity = livesElement.style.opacity === '0' ? '1' : '0';
+            blinkCount++;
+            
+            if (blinkCount >= maxBlinks) {
+                clearInterval(blinkInterval);
+                livesElement.style.opacity = '1'; // 最終的に表示状態に戻す
+            }
+        }, 150); // 150msごとに点滅
+    }
+
+    flashRedBackground() {
+        // 背景を赤くフラッシュさせる
+        const canvas = document.querySelector('canvas');
+        if (!canvas) return;
+        const originalFilter = canvas.style.filter || '';
+        
+        // 赤いフィルターを適用
+        canvas.style.filter = 'sepia(1) saturate(2) hue-rotate(320deg) brightness(0.8)';
+        
+        // 200ms後に元に戻す
+        setTimeout(() => {
+            canvas.style.filter = originalFilter;
+        }, 200);
     }
 
     removeNote(index) {

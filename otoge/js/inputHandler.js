@@ -63,24 +63,28 @@ class InputHandler {
             stage: this.gameLogic.stage
         });
         
+        // ゲーム開始前の処理
+        if (!this.gameLogic.gameRunning && !this.gameLogic.stageTransitioning && !this.gameLogic.isGameOver) {
+            console.log('Starting game due to click');
+            this.gameLogic.startGame();
+            return;
+        }
+        
+        // ゲーム中以外は無視
+        if (!this.gameLogic.gameRunning || this.gameLogic.stageTransitioning) {
+            console.log('Click ignored due to game state');
+            return;
+        }
+        
+        // ゲーム中：まずレーン判定を行う
         const laneIndex = this.getLaneFromPosition(x, y);
         
         if (laneIndex >= 0) {
-            if (!this.gameLogic.gameRunning && !this.gameLogic.stageTransitioning && !this.gameLogic.isGameOver) {
-                console.log('Starting game due to click');
-                this.gameLogic.startGame();
-            } else if (this.gameLogic.gameRunning) {
-                // レーン全体でのタップを有効にする
-                this.gameLogic.handleInput(laneIndex);
-            } else {
-                console.log('Click ignored due to game state');
-            }
-        } else if (this.gameLogic.gameRunning) {
-            // レーン外でもタップした場合、最も近いレーンを判定
-            const nearestLane = this.getNearestLane(x);
-            if (nearestLane >= 0) {
-                this.gameLogic.handleInput(nearestLane);
-            }
+            // レーン内クリック：ヒット判定またはミスタップ判定をGameLogicに委譲
+            this.gameLogic.handleInput(laneIndex);
+        } else {
+            // レーン外クリック：直接ミスタップ
+            this.gameLogic.handleMistap();
         }
     }
 
