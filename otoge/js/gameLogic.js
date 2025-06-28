@@ -10,6 +10,7 @@ class GameLogic {
         this.lives = 4;
         this.gameRunning = false;
         this.isGameOver = false;
+        this.isStage3MusicPlaying = false;
         this.noteSpeed = 0.1;
         this.lanePositions = [-2.4, -0.8, 0.8, 2.4];
         this.judgmentAreaZ = 1;
@@ -30,7 +31,10 @@ class GameLogic {
         this.money = this.costManager ? this.costManager.getInitialMoney() : 30000;
         this.timer = 30;
         this.lives = 4;
-        this.stage = 1;  // 常にステージ1からスタート（ゲームオーバー時のリスタート）
+        // ステージ3の音楽が再生中でなければステージ1にリセット
+        if (!this.isStage3MusicPlaying) {
+            this.stage = 1;
+        }
         this.isGameOver = false;
         
         // ゲームパラメータをリセット（ゲームオーバー後のリスタート用）
@@ -40,20 +44,23 @@ class GameLogic {
         // 既存のノートをすべて削除
         this.clearAllNotes();
         
-        // 音楽を停止
-        if (window.soundManager && typeof window.soundManager.stopMusic === 'function') {
-            window.soundManager.stopMusic();
-        }
-        // フォールバック音楽も停止
-        if (window.currentAudio) {
-            window.currentAudio.pause();
-            window.currentAudio.currentTime = 0;
-            window.currentAudio = null;
-        }
-        
-        // 字幕を停止
-        if (window.subtitleManager) {
-            window.subtitleManager.stop();
+        // ステージ3の音楽が再生中でなければ音楽と字幕を停止
+        if (!this.isStage3MusicPlaying) {
+            // 音楽を停止
+            if (window.soundManager && typeof window.soundManager.stopMusic === 'function') {
+                window.soundManager.stopMusic();
+            }
+            // フォールバック音楽も停止
+            if (window.currentAudio) {
+                window.currentAudio.pause();
+                window.currentAudio.currentTime = 0;
+                window.currentAudio = null;
+            }
+            
+            // 字幕を停止
+            if (window.subtitleManager) {
+                window.subtitleManager.stop();
+            }
         }
         
         // ゲーム開始時に確実に背景を通常状態に戻す
@@ -693,6 +700,9 @@ class GameLogic {
         setTimeout(() => {
             document.body.removeChild(aiSingingDisplay);
             document.head.removeChild(style);
+            
+            // ステージ3音楽再生フラグを設定
+            this.isStage3MusicPlaying = true;
             
             // AI歌唱音楽を再生
             console.log('SoundManager:', window.soundManager);

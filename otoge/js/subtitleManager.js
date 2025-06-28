@@ -28,8 +28,8 @@ class SubtitleManager {
             font-family: Arial, sans-serif;
             font-size: 36px;
             font-weight: bold;
-            color: white;
-            background: transparent;
+            color: #FFD700;
+            background: rgba(0, 0, 0, 0.2);
             padding: 20px 30px;
             border-radius: 15px;
             z-index: 2000;
@@ -163,7 +163,7 @@ class SubtitleManager {
                 // アクティブな字幕が見つかった
                 if (this.currentSubtitleIndex !== i) {
                     this.currentSubtitleIndex = i;
-                    this.showSubtitle(subtitle.text);
+                    this.showSubtitle('♪～ ' + subtitle.text);
                 }
                 foundActiveSubtitle = true;
                 break;
@@ -218,7 +218,7 @@ class SubtitleManager {
             if (currentTimeMs >= subtitle.startTime && currentTimeMs <= subtitle.endTime) {
                 if (this.currentSubtitleIndex !== i) {
                     this.currentSubtitleIndex = i;
-                    this.showSubtitle(subtitle.text);
+                    this.showSubtitle('♪～ ' + subtitle.text);
                 }
                 foundActiveSubtitle = true;
                 break;
