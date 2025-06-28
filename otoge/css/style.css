@@ -149,6 +149,11 @@ body {
     }
 }
 
+/* 字幕表示コンテナ */
+#subtitle-container {
+    /* subtitleManager.js で動的にスタイルを設定 */
+}
+
 @media (max-width: 768px) {
     #cost-display-container {
         top: 140px;
@@ -158,5 +163,13 @@ body {
     .cost-item {
         font-size: 18px;
         padding: 6px 0;
+    }
+    
+    /* スマートフォン用字幕スタイル調整 */
+    #subtitle-container {
+        font-size: 27px !important;
+        bottom: 40px !important;
+        width: 95% !important;
+        padding: 12px 20px !important;
     }
 }

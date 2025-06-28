@@ -17,6 +17,8 @@ class GameLogic {
         this.lastNoteTime = 0;
         this.noteInterval = 1000;
         this.stageTransitioning = false; // ステージ遷移中フラグ
+        this.lastMistapTime = 0; // 最後のミスタップ時刻
+        this.mistapCooldown = 300; // ミスタップクールダウン時間（0.3秒）
     }
 
     init() {
@@ -48,6 +50,14 @@ class GameLogic {
             window.currentAudio.currentTime = 0;
             window.currentAudio = null;
         }
+        
+        // 字幕を停止
+        if (window.subtitleManager) {
+            window.subtitleManager.stop();
+        }
+        
+        // ゲーム開始時に確実に背景を通常状態に戻す
+        this.resetBackgroundToNormal();
         
         this.updateUI();
         this.startTimer();
@@ -445,6 +455,15 @@ class GameLogic {
     }
 
     handleMistap() {
+        // クールダウン中かチェック
+        const currentTime = Date.now();
+        if (currentTime - this.lastMistapTime < this.mistapCooldown) {
+            // クールダウン中なのでミスタップとして扱わない
+            return;
+        }
+        
+        // ミスタップ時刻を記録
+        this.lastMistapTime = currentTime;
         
         // ライフ減少
         this.lives--;
@@ -515,7 +534,7 @@ class GameLogic {
         
         document.body.appendChild(missElement);
         
-        // 800ms後に削除
+        // 800ms後に削除し、確実に通常状態に戻す
         setTimeout(() => {
             if (document.body.contains(missElement)) {
                 document.body.removeChild(missElement);
@@ -523,6 +542,8 @@ class GameLogic {
             if (document.head.contains(style)) {
                 document.head.removeChild(style);
             }
+            // Miss文字削除後に確実に背景を通常状態に戻す
+            this.resetBackgroundToNormal();
         }, 800);
     }
 
@@ -549,15 +570,22 @@ class GameLogic {
         // 背景を赤くフラッシュさせる
         const canvas = document.querySelector('canvas');
         if (!canvas) return;
-        const originalFilter = canvas.style.filter || '';
         
         // 赤いフィルターを適用
         canvas.style.filter = 'sepia(1) saturate(2) hue-rotate(320deg) brightness(0.8)';
         
-        // 200ms後に元に戻す
+        // 200ms後に元に戻す（短めに調整）
         setTimeout(() => {
-            canvas.style.filter = originalFilter;
+            this.resetBackgroundToNormal();
         }, 200);
+    }
+
+    resetBackgroundToNormal() {
+        // 確実に背景を通常状態に戻す
+        const canvas = document.querySelector('canvas');
+        if (canvas) {
+            canvas.style.filter = '';
+        }
     }
 
     removeNote(index) {
@@ -684,6 +712,14 @@ class GameLogic {
                 
                 // オーディオ要素をグローバルに保存して停止できるようにする
                 window.currentAudio = audio;
+            }
+            
+            // 字幕表示開始
+            if (window.subtitleManager) {
+                console.log('Starting subtitle display...');
+                window.subtitleManager.start();
+            } else {
+                console.warn('SubtitleManager not available');
             }
             
             // ゲーム続行

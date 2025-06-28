@@ -19,6 +19,11 @@ class Game {
             this.soundManager = new SoundManager();
             window.soundManager = this.soundManager;
             
+            // 字幕マネージャーの初期化
+            this.subtitleManager = new SubtitleManager();
+            window.subtitleManager = this.subtitleManager;
+            await this.subtitleManager.loadVTTFile('assets/vtt/7_30 through the ticket gateB.vtt');
+            
             // コストマネージャーの初期化
             this.costManager = new CostManager();
             await this.costManager.init();
