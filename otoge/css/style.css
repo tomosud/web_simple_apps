@@ -82,7 +82,7 @@ body {
 
 @media (max-width: 768px) {
     #game-info {
-        top: 10px;
+        top: 40px;
         padding: 10px 20px;
     }
     
