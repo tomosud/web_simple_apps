@@ -148,6 +148,8 @@ class SubtitleManager {
                 // アクティブな字幕が見つかった
                 if (this.currentSubtitleIndex !== i) {
                     this.currentSubtitleIndex = i;
+                    const duration = subtitle.endTime - subtitle.startTime;
+                    console.log(`Showing subtitle ${i}: "${subtitle.text}" (duration: ${duration}ms)`);
                     this.showSubtitle(subtitle.text);
                 }
                 foundActiveSubtitle = true;
@@ -170,27 +172,22 @@ class SubtitleManager {
         this.subtitleElement.textContent = text;
         this.subtitleElement.style.display = 'block';
         
-        // フェードインアニメーション
-        this.subtitleElement.style.opacity = '0';
-        this.subtitleElement.style.transform = 'translateX(-50%) translateY(10px)';
-        
-        setTimeout(() => {
-            this.subtitleElement.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
-            this.subtitleElement.style.opacity = '1';
-            this.subtitleElement.style.transform = 'translateX(-50%) translateY(0)';
-        }, 50);
+        // 短いアニメーションで即座に表示
+        this.subtitleElement.style.transition = 'opacity 0.1s ease-out, transform 0.1s ease-out';
+        this.subtitleElement.style.opacity = '1';
+        this.subtitleElement.style.transform = 'translateX(-50%) translateY(0)';
     }
 
     hideSubtitle() {
         if (!this.subtitleElement) return;
         
-        this.subtitleElement.style.transition = 'opacity 0.2s ease-out';
+        this.subtitleElement.style.transition = 'opacity 0.1s ease-out';
         this.subtitleElement.style.opacity = '0';
         
         setTimeout(() => {
             this.subtitleElement.style.display = 'none';
             this.subtitleElement.style.transition = '';
-        }, 200);
+        }, 100);
     }
 
     // 音楽の再生時間に同期する場合用（将来的な拡張）
