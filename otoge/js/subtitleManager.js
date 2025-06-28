@@ -19,7 +19,7 @@ class SubtitleManager {
         this.subtitleElement.id = 'subtitle-container';
         this.subtitleElement.style.cssText = `
             position: fixed;
-            bottom: 60px;
+            bottom: 80px;
             left: 50%;
             transform: translateX(-50%);
             width: 90%;
@@ -27,16 +27,16 @@ class SubtitleManager {
             text-align: center;
             font-family: Arial, sans-serif;
             font-size: 36px;
+            font-weight: bold;
             color: white;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px 25px;
-            border-radius: 10px;
-            z-index: 1500;
+            background: transparent;
+            padding: 20px 30px;
+            border-radius: 15px;
+            z-index: 2000;
             pointer-events: none;
             display: none;
-            line-height: 1.4;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.9);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+            line-height: 1.5;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 1);
         `;
         
         document.body.appendChild(this.subtitleElement);
@@ -44,12 +44,21 @@ class SubtitleManager {
 
     async loadVTTFile(vttPath) {
         try {
-            const response = await fetch(vttPath);
+            const response = await fetch(vttPath, {
+                headers: {
+                    'Accept': 'text/plain; charset=utf-8'
+                }
+            });
             if (!response.ok) {
                 throw new Error(`Failed to load VTT file: ${vttPath}`);
             }
             
-            const vttText = await response.text();
+            // UTF-8として明示的にデコード
+            const arrayBuffer = await response.arrayBuffer();
+            const decoder = new TextDecoder('utf-8');
+            const vttText = decoder.decode(arrayBuffer);
+            
+            
             this.parseVTT(vttText);
             console.log(`Loaded ${this.subtitles.length} subtitle entries from ${vttPath}`);
             return true;
@@ -69,6 +78,11 @@ class SubtitleManager {
             
             // タイムコード行を検出
             if (line.includes('-->')) {
+                // 前の字幕があれば完了させる
+                if (currentSubtitle && currentSubtitle.text) {
+                    this.subtitles.push(currentSubtitle);
+                }
+                
                 const timeMatch = line.match(/(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2})\.(\d{3})/);
                 if (timeMatch) {
                     const startTime = this.parseTimeToMs(timeMatch[1], timeMatch[2], timeMatch[3]);
@@ -89,12 +103,18 @@ class SubtitleManager {
                     currentSubtitle.text = line;
                 }
                 
-                // 次の行が空行またはタイムコードの場合、字幕を完了
-                if (i + 1 >= lines.length || !lines[i + 1].trim() || lines[i + 1].includes('-->')) {
+                // 次の行が空行またはタイムコードまたはファイル終端の場合、字幕を完了
+                const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : '';
+                if (i + 1 >= lines.length || !nextLine || nextLine.includes('-->')) {
                     this.subtitles.push(currentSubtitle);
                     currentSubtitle = null;
                 }
             }
+        }
+        
+        // ファイル終端で最後の字幕を完了
+        if (currentSubtitle && currentSubtitle.text) {
+            this.subtitles.push(currentSubtitle);
         }
     }
 
@@ -137,19 +157,19 @@ class SubtitleManager {
     updateSubtitles() {
         if (!this.isPlaying) return;
         
-        const currentTime = Date.now() - this.startTime;
+        const currentTime = Date.now() - this.startTime - 500; // 0.5秒遅らせる
         let foundActiveSubtitle = false;
         
-        // 現在の時刻に適した字幕を検索
+        
+        // VTTで設定された時間通りに表示する
         for (let i = 0; i < this.subtitles.length; i++) {
             const subtitle = this.subtitles[i];
             
+            // 設定された時間範囲内かチェック
             if (currentTime >= subtitle.startTime && currentTime <= subtitle.endTime) {
                 // アクティブな字幕が見つかった
                 if (this.currentSubtitleIndex !== i) {
                     this.currentSubtitleIndex = i;
-                    const duration = subtitle.endTime - subtitle.startTime;
-                    console.log(`Showing subtitle ${i}: "${subtitle.text}" (duration: ${duration}ms)`);
                     this.showSubtitle(subtitle.text);
                 }
                 foundActiveSubtitle = true;
@@ -168,6 +188,8 @@ class SubtitleManager {
 
     showSubtitle(text) {
         if (!this.subtitleElement) return;
+        
+        console.log(`>>> DISPLAYING SUBTITLE: "${text}"`); // デバッグ
         
         this.subtitleElement.textContent = text;
         this.subtitleElement.style.display = 'block';
@@ -218,6 +240,15 @@ class SubtitleManager {
     // デバッグ用: 字幕リストを表示
     logSubtitles() {
         console.log('Loaded subtitles:', this.subtitles);
+    }
+
+    // テスト表示（開発者ツールで実行可能）
+    testDisplay() {
+        console.log('Testing subtitle display...');
+        this.showSubtitle('テスト字幕 - Test Subtitle');
+        setTimeout(() => {
+            this.hideSubtitle();
+        }, 3000);
     }
 
     // クリーンアップ
