@@ -28,8 +28,8 @@ class SceneManager {
 
     createCamera() {
         const aspect = window.innerWidth / window.innerHeight;
-        // スマートフォン縦画面時は画角を21%狭くして要素を大きく表示
-        const fov = aspect < 1.0 ? 59.25 : 75;
+        // スマートフォン縦画面時は画角を13%狭くして要素を大きく表示
+        const fov = aspect < 1.0 ? 65.25 : 75;
         this.camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, 1000);
         
         // アスペクト比に応じてカメラ位置を調整（スマートフォン対応）
