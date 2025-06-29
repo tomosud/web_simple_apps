@@ -11,6 +11,35 @@ class SubtitleManager {
 
     init() {
         this.createSubtitleContainer();
+        this.setupResponsiveFontSize();
+        window.addEventListener('resize', () => this.setupResponsiveFontSize());
+    }
+
+    setupResponsiveFontSize() {
+        const viewportHeight = window.innerHeight;
+        const viewportWidth = window.innerWidth;
+        
+        // スマホ縦画面の基準サイズ（縦基準で調整）
+        // スマホ時の25.2pxを基準とし、縦画面の高さ基準でスケール
+        const baseFontSize = 25.2; // スマホでの字幕サイズ
+        const referenceHeight = 768; // 参考となる縦画面の高さ
+        
+        // 縦画面の高さに基づいてフォントサイズを計算
+        // ただし、横幅が広い場合（PC横画面）でも縦基準で調整
+        let scaleFactor = viewportHeight / referenceHeight;
+        
+        // 最小・最大サイズの制限
+        scaleFactor = Math.max(0.8, Math.min(scaleFactor, 2.5));
+        
+        const dynamicFontSize = baseFontSize * scaleFactor;
+        
+        // CSS変数として設定
+        document.documentElement.style.setProperty('--dynamic-font-size', `${dynamicFontSize}px`);
+        
+        // 字幕コンテナに直接適用
+        if (this.subtitleElement) {
+            this.subtitleElement.style.fontSize = `${dynamicFontSize}px`;
+        }
     }
 
     createSubtitleContainer() {

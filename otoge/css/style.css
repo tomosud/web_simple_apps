@@ -154,6 +154,11 @@ body {
     /* subtitleManager.js で動的にスタイルを設定 */
 }
 
+/* 動的フォントサイズクラス */
+.responsive-font {
+    font-size: var(--dynamic-font-size) !important;
+}
+
 @media (max-width: 768px) {
     #cost-display-container {
         top: 140px;
