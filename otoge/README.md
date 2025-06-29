@@ -1,6 +1,11 @@
 # 音ゲー（otoge）
 
 ---
+# 🎮 プレイ方法
+
+https://tomosud.github.io/web_simple_apps/otoge/
+
+↑を開いて。
 
 # 🎮 ゲームプレイヤー向け情報
 
