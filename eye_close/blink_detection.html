@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>まばたき検出システム - 正確なEAR計算</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 30px;
+        }
+        
+        .video-container {
+            position: relative;
+            background: #f8f9fa;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        #video {
+            width: 100%;
+            height: auto;
+            display: block;
+            transform: scaleX(-1);
+        }
+        
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            transform: scaleX(-1);
+        }
+        
+        .control-panel {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        button {
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        button:not(:disabled) {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+        }
+        
+        button:not(:disabled):hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        
+        button:disabled {
+            background: #ccc;
+            color: #666;
+            cursor: not-allowed;
+        }
+        
+        .status-section {
+            margin-bottom: 30px;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+        
+        .blink-counter {
+            background: #e3f2fd;
+            color: #1976d2;
+            font-size: 18px;
+        }
+        
+        .ear-values {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+        
+        .threshold-value {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+        
+        .eye-status {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+        
+        .eye-status.closed {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .threshold-control {
+            margin: 20px 0;
+        }
+        
+        .threshold-control label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        
+        .threshold-control input[type="range"] {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        
+        .debug-info {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        
+        .history-section {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 10px;
+        }
+        
+        .history-item {
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+        }
+        
+        .history-item:last-child {
+            border-bottom: none;
+        }
+        
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+    
+    <!-- TensorFlow.js関連のライブラリ -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>まばたき検出システム - 正確なEAR計算</h1>
+        
+        <div class="main-content">
+            <div class="video-container">
+                <video id="video" autoplay muted playsinline width="640" height="480"></video>
+                <canvas id="canvas" width="640" height="480"></canvas>
+            </div>
+            
+            <div class="control-panel">
+                <div class="controls">
+                    <button id="startButton" disabled>検出開始</button>
+                    <button id="stopButton" disabled>停止</button>
+                    <button id="resetButton">カウントリセット</button>
+                </div>
+                
+                <div class="status-section">
+                    <div class="status-item blink-counter">
+                        <span>まばたき回数:</span>
+                        <span id="blinkCount">0</span>
+                    </div>
+                    
+                    <div class="status-item ear-values">
+                        <span>左目EAR:</span>
+                        <span id="leftEAR">-</span>
+                    </div>
+                    
+                    <div class="status-item ear-values">
+                        <span>右目EAR:</span>
+                        <span id="rightEAR">-</span>
+                    </div>
+                    
+                    <div class="status-item threshold-value">
+                        <span>閾値:</span>
+                        <span id="thresholdDisplay">0.27</span>
+                    </div>
+                    
+                    <div class="status-item eye-status" id="eyeStatus">
+                        <span>目の状態:</span>
+                        <span>待機中</span>
+                    </div>
+                </div>
+                
+                <div class="threshold-control">
+                    <label for="thresholdSlider">EAR閾値調整:</label>
+                    <input type="range" id="thresholdSlider" min="0.15" max="0.35" step="0.01" value="0.27">
+                    <small>推奨値: 0.25-0.30</small>
+                </div>
+                
+                <div class="history-section">
+                    <h4>まばたき履歴</h4>
+                    <div id="blinkHistory">
+                        <div class="history-item">履歴がここに表示されます</div>
+                    </div>
+                </div>
+                
+                <div class="debug-info" id="debugInfo">
+                    システム初期化中...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // グローバル変数
+        let detector = null;
+        let video = null;
+        let canvas = null;
+        let ctx = null;
+        let isDetecting = false;
+        let animationId = null;
+        
+        // まばたき検出用変数
+        let blinkCount = 0;
+        let EAR_THRESHOLD = 0.27;
+        let isEyesClosed = false;
+        let blinkHistory = [];
+        
+        // 指定されたランドマークインデックス
+        const EYE_LANDMARKS = {
+            left: [33, 160, 158, 133, 153, 144],   // p1, p2, p3, p4, p5, p6
+            right: [362, 385, 387, 263, 373, 380]  // p1, p2, p3, p4, p5, p6
+        };
+        
+        // DOM要素
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const resetButton = document.getElementById('resetButton');
+        const blinkCountElement = document.getElementById('blinkCount');
+        const leftEARElement = document.getElementById('leftEAR');
+        const rightEARElement = document.getElementById('rightEAR');
+        const thresholdDisplay = document.getElementById('thresholdDisplay');
+        const eyeStatusElement = document.getElementById('eyeStatus');
+        const thresholdSlider = document.getElementById('thresholdSlider');
+        const blinkHistoryElement = document.getElementById('blinkHistory');
+        const debugInfo = document.getElementById('debugInfo');
+        
+        // 正確なEAR計算関数（指定された公式に従う）
+        function calculateEAR(landmarks, eyeIndices) {
+            // インデックスの順序: [p1, p2, p3, p4, p5, p6]
+            const p1 = landmarks[eyeIndices[0]]; // 左端
+            const p2 = landmarks[eyeIndices[1]]; // 上側1
+            const p3 = landmarks[eyeIndices[2]]; // 上側2  
+            const p4 = landmarks[eyeIndices[3]]; // 右端
+            const p5 = landmarks[eyeIndices[4]]; // 下側1
+            const p6 = landmarks[eyeIndices[5]]; // 下側2
+            
+            if (!p1 || !p2 || !p3 || !p4 || !p5 || !p6) {
+                return 0;
+            }
+            
+            // |p2-p6| の距離を計算
+            const dist_p2_p6 = Math.sqrt(
+                Math.pow(p2.x - p6.x, 2) + Math.pow(p2.y - p6.y, 2)
+            );
+            
+            // |p3-p5| の距離を計算
+            const dist_p3_p5 = Math.sqrt(
+                Math.pow(p3.x - p5.x, 2) + Math.pow(p3.y - p5.y, 2)
+            );
+            
+            // |p1-p4| の距離を計算
+            const dist_p1_p4 = Math.sqrt(
+                Math.pow(p1.x - p4.x, 2) + Math.pow(p1.y - p4.y, 2)
+            );
+            
+            // EAR = (|p2-p6| + |p3-p5|) / (2 × |p1-p4|)
+            const ear = (dist_p2_p6 + dist_p3_p5) / (2 * dist_p1_p4);
+            
+            return ear;
+        }
+        
+        // まばたき検出処理
+        function detectBlink(leftEAR, rightEAR) {
+            // 両目の平均EARを使用
+            const avgEAR = (leftEAR + rightEAR) / 2;
+            
+            // EARが閾値未満になった瞬間を検出
+            if (avgEAR < EAR_THRESHOLD && !isEyesClosed) {
+                // 目を閉じた瞬間
+                isEyesClosed = true;
+                blinkCount++;
+                
+                // 履歴に追加
+                const now = new Date();
+                const timestamp = now.toLocaleTimeString('ja-JP');
+                blinkHistory.unshift({
+                    count: blinkCount,
+                    timestamp: timestamp,
+                    ear: avgEAR.toFixed(3)
+                });
+                
+                // 履歴を最新20件に制限
+                if (blinkHistory.length > 20) {
+                    blinkHistory = blinkHistory.slice(0, 20);
+                }
+                
+                updateBlinkHistory();
+                updateUI();
+                
+                console.log(`まばたき検出! #${blinkCount} (EAR: ${avgEAR.toFixed(3)})`);
+                
+            } else if (avgEAR >= EAR_THRESHOLD && isEyesClosed) {
+                // 目を開いた瞬間
+                isEyesClosed = false;
+            }
+        }
+        
+        // UI更新
+        function updateUI() {
+            blinkCountElement.textContent = blinkCount;
+            thresholdDisplay.textContent = EAR_THRESHOLD.toFixed(2);
+            
+            // 目の状態表示
+            const statusText = isEyesClosed ? '目を閉じています' : '目を開いています';
+            eyeStatusElement.innerHTML = `<span>目の状態:</span><span>${statusText}</span>`;
+            eyeStatusElement.className = `status-item eye-status ${isEyesClosed ? 'closed' : ''}`;
+        }
+        
+        // まばたき履歴表示更新
+        function updateBlinkHistory() {
+            if (blinkHistory.length === 0) {
+                blinkHistoryElement.innerHTML = '<div class="history-item">履歴がここに表示されます</div>';
+                return;
+            }
+            
+            blinkHistoryElement.innerHTML = blinkHistory.map(item => 
+                `<div class="history-item">#${item.count} - ${item.timestamp} (EAR: ${item.ear})</div>`
+            ).join('');
+        }
+        
+        // ランドマーク描画
+        function drawLandmarks(keypoints) {
+            // 左目のランドマークを描画
+            drawEyeLandmarks(keypoints, EYE_LANDMARKS.left, 'blue');
+            // 右目のランドマークを描画
+            drawEyeLandmarks(keypoints, EYE_LANDMARKS.right, 'red');
+        }
+        
+        function drawEyeLandmarks(keypoints, indices, color) {
+            ctx.fillStyle = color;
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            
+            // ランドマークポイントを描画
+            indices.forEach((index, i) => {
+                const point = keypoints[index];
+                if (point) {
+                    ctx.beginPath();
+                    ctx.arc(point.x, point.y, i === 0 || i === 3 ? 4 : 3, 0, 2 * Math.PI);
+                    ctx.fill();
+                    
+                    // ポイント番号を表示（デバッグ用）
+                    ctx.fillStyle = 'white';
+                    ctx.font = '10px Arial';
+                    ctx.fillText(i + 1, point.x + 5, point.y - 5);
+                    ctx.fillStyle = color;
+                }
+            });
+            
+            // 目の輪郭を線で結ぶ
+            ctx.beginPath();
+            indices.forEach((index, i) => {
+                const point = keypoints[index];
+                if (point) {
+                    if (i === 0) {
+                        ctx.moveTo(point.x, point.y);
+                    } else {
+                        ctx.lineTo(point.x, point.y);
+                    }
+                }
+            });
+            ctx.closePath();
+            ctx.stroke();
+        }
+        
+        // 顔検出とEAR計算
+        async function detectFaces() {
+            if (!isDetecting || !video || video.readyState < 2) {
+                if (isDetecting) {
+                    animationId = requestAnimationFrame(detectFaces);
+                }
+                return;
+            }
+            
+            try {
+                const estimationConfig = { flipHorizontal: false };
+                const faces = await detector.estimateFaces(video, estimationConfig);
+                
+                // キャンバスをクリア
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                if (faces.length > 0) {
+                    const face = faces[0];
+                    const keypoints = face.keypoints;
+                    
+                    // ランドマークを描画
+                    drawLandmarks(keypoints);
+                    
+                    // EAR計算
+                    const leftEAR = calculateEAR(keypoints, EYE_LANDMARKS.left);
+                    const rightEAR = calculateEAR(keypoints, EYE_LANDMARKS.right);
+                    
+                    // UI更新
+                    leftEARElement.textContent = leftEAR.toFixed(3);
+                    rightEARElement.textContent = rightEAR.toFixed(3);
+                    
+                    // まばたき検出
+                    detectBlink(leftEAR, rightEAR);
+                    
+                    // デバッグ情報更新
+                    debugInfo.textContent = `顔検出: OK | 左EAR: ${leftEAR.toFixed(3)} | 右EAR: ${rightEAR.toFixed(3)} | 平均: ${((leftEAR + rightEAR) / 2).toFixed(3)} | 閾値: ${EAR_THRESHOLD} | 目の状態: ${isEyesClosed ? '閉' : '開'}`;
+                    
+                } else {
+                    leftEARElement.textContent = '-';
+                    rightEARElement.textContent = '-';
+                    debugInfo.textContent = '顔が検出されていません';
+                }
+                
+            } catch (error) {
+                console.error('検出エラー:', error);
+                debugInfo.textContent = `エラー: ${error.message}`;
+            }
+            
+            if (isDetecting) {
+                animationId = requestAnimationFrame(detectFaces);
+            }
+        }
+        
+        // モデルセットアップ
+        async function setupModel() {
+            try {
+                debugInfo.textContent = '顔検出モデルを読み込み中...';
+                
+                const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
+                const detectorConfig = {
+                    runtime: 'mediapipe',
+                    solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh'
+                };
+                
+                detector = await faceLandmarksDetection.createDetector(model, detectorConfig);
+                debugInfo.textContent = 'モデル読み込み完了 - 開始ボタンを押してください';
+                startButton.disabled = false;
+                
+            } catch (error) {
+                console.error('モデル初期化エラー:', error);
+                debugInfo.textContent = `モデル初期化失敗: ${error.message}`;
+            }
+        }
+        
+        // カメラ開始
+        async function startCamera() {
+            try {
+                debugInfo.textContent = 'カメラ起動中...';
+                
+                video = document.getElementById('video');
+                canvas = document.getElementById('canvas');
+                ctx = canvas.getContext('2d');
+                
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: 640,
+                        height: 480,
+                        facingMode: 'user'
+                    },
+                    audio: false
+                });
+                
+                video.srcObject = stream;
+                
+                video.onloadedmetadata = () => {
+                    video.play();
+                    isDetecting = true;
+                    detectFaces();
+                    
+                    debugInfo.textContent = '検出開始 - まばたきしてください';
+                    startButton.disabled = true;
+                    stopButton.disabled = false;
+                };
+                
+            } catch (error) {
+                console.error('カメラエラー:', error);
+                debugInfo.textContent = `カメラアクセス失敗: ${error.message}`;
+            }
+        }
+        
+        // カメラ停止
+        function stopCamera() {
+            isDetecting = false;
+            
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            
+            if (video && video.srcObject) {
+                const stream = video.srcObject;
+                stream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            
+            if (ctx) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+            
+            debugInfo.textContent = '停止しました';
+            startButton.disabled = false;
+            stopButton.disabled = true;
+        }
+        
+        // カウントリセット
+        function resetCount() {
+            blinkCount = 0;
+            blinkHistory = [];
+            isEyesClosed = false;
+            updateUI();
+            updateBlinkHistory();
+            debugInfo.textContent = 'カウントをリセットしました';
+        }
+        
+        // 閾値変更
+        thresholdSlider.addEventListener('input', (e) => {
+            EAR_THRESHOLD = parseFloat(e.target.value);
+            updateUI();
+        });
+        
+        // イベントリスナー
+        startButton.addEventListener('click', startCamera);
+        stopButton.addEventListener('click', stopCamera);
+        resetButton.addEventListener('click', resetCount);
+        
+        // 初期化
+        setupModel();
+        updateUI();
+    </script>
+</body>
+</html>

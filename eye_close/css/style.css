@@ -1,0 +1,506 @@
+/* リセットCSS */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+/* 基本設定 */
+body {
+    font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    color: #333;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ヘッダー */
+header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+header h1 {
+    color: white;
+    font-size: 2.5rem;
+    font-weight: 300;
+    margin-bottom: 15px;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.status-indicator {
+    display: inline-block;
+    padding: 8px 20px;
+    border-radius: 25px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+}
+
+.status-indicator.status-success {
+    background: linear-gradient(45deg, #4CAF50, #45a049);
+    color: white;
+}
+
+.status-indicator.status-active {
+    background: linear-gradient(45deg, #2196F3, #1976D2);
+    color: white;
+    animation: pulse 2s infinite;
+}
+
+.status-indicator.status-error {
+    background: linear-gradient(45deg, #f44336, #d32f2f);
+    color: white;
+}
+
+.status-indicator.status-inactive {
+    background: linear-gradient(45deg, #9E9E9E, #757575);
+    color: white;
+}
+
+.status-indicator.status-info {
+    background: linear-gradient(45deg, #FF9800, #F57C00);
+    color: white;
+}
+
+/* メインコンテンツ */
+main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 350px;
+    gap: 30px;
+    align-items: start;
+}
+
+/* カメラコンテナ */
+.camera-container {
+    position: relative;
+    background: white;
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    aspect-ratio: 4/3;
+}
+
+#videoElement {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+#overlayCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.overlay-message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.8);
+    color: white;
+    padding: 15px 25px;
+    border-radius: 10px;
+    font-size: 1.1rem;
+    font-weight: 500;
+    z-index: 3;
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+}
+
+/* コントロール */
+.controls {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin: 20px 0;
+}
+
+.control-btn {
+    padding: 12px 30px;
+    font-size: 1rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 25px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    min-width: 120px;
+}
+
+.control-btn:not(:disabled) {
+    background: linear-gradient(45deg, #4CAF50, #45a049);
+    color: white;
+}
+
+.control-btn:not(:disabled):hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+}
+
+.control-btn:disabled {
+    background: #ccc;
+    color: #666;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* 情報パネル */
+.info-panel {
+    background: white;
+    border-radius: 15px;
+    padding: 25px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    height: fit-content;
+}
+
+.current-status {
+    margin-bottom: 30px;
+    text-align: center;
+}
+
+.status-text {
+    font-size: 1.5rem;
+    font-weight: 600;
+    padding: 15px;
+    border-radius: 10px;
+    transition: all 0.3s ease;
+}
+
+.status-text.eyes-open {
+    background: linear-gradient(45deg, #E8F5E8, #C8E6C9);
+    color: #2E7D32;
+    border: 2px solid #4CAF50;
+}
+
+.status-text.eyes-closed {
+    background: linear-gradient(45deg, #FFEBEE, #FFCDD2);
+    color: #C62828;
+    border: 2px solid #F44336;
+}
+
+.status-text.eyes-partial {
+    background: linear-gradient(45deg, #FFF8E1, #FFECB3);
+    color: #E65100;
+    border: 2px solid #FF9800;
+}
+
+.status-text.no-face {
+    background: linear-gradient(45deg, #F3E5F5, #E1BEE7);
+    color: #7B1FA2;
+    border: 2px solid #9C27B0;
+}
+
+.status-text.inactive {
+    background: linear-gradient(45deg, #F5F5F5, #E0E0E0);
+    color: #616161;
+    border: 2px solid #9E9E9E;
+}
+
+/* 履歴コンテナ */
+.history-container h3 {
+    color: #333;
+    font-size: 1.2rem;
+    margin-bottom: 15px;
+    text-align: center;
+    font-weight: 600;
+}
+
+.history-scroll {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 2px solid #E0E0E0;
+    border-radius: 10px;
+    background: #FAFAFA;
+}
+
+.history-placeholder {
+    padding: 30px;
+    text-align: center;
+    color: #666;
+    font-style: italic;
+}
+
+.history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    border-bottom: 1px solid #E0E0E0;
+    transition: all 0.3s ease;
+    font-size: 0.9rem;
+}
+
+.history-item:last-child {
+    border-bottom: none;
+}
+
+.history-item:hover {
+    background: #F0F0F0;
+}
+
+.history-time {
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+    color: #666;
+    min-width: 80px;
+}
+
+.history-status {
+    font-weight: 500;
+    flex: 1;
+    text-align: right;
+}
+
+.history-item.history-eyes-open .history-status {
+    color: #2E7D32;
+}
+
+.history-item.history-eyes-closed .history-status {
+    color: #C62828;
+}
+
+.history-item.history-eyes-partial .history-status {
+    color: #E65100;
+}
+
+.history-item.history-no-face .history-status {
+    color: #7B1FA2;
+}
+
+.history-item.history-blink {
+    background: linear-gradient(45deg, #E3F2FD, #BBDEFB);
+    border-left: 4px solid #2196F3;
+    font-weight: bold;
+}
+
+.history-item.history-blink .history-status {
+    color: #1976D2;
+}
+
+/* フッター */
+footer {
+    margin-top: 30px;
+    text-align: center;
+}
+
+.tech-info {
+    color: rgba(255,255,255,0.8);
+    font-size: 0.9rem;
+}
+
+/* アニメーション */
+@keyframes pulse {
+    0% {
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+    50% {
+        box-shadow: 0 4px 20px rgba(33, 150, 243, 0.4);
+    }
+    100% {
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+}
+
+/* スマートフォン対応（縦向き） */
+@media (max-width: 768px) {
+    .container {
+        padding: 15px;
+    }
+    
+    header h1 {
+        font-size: 1.8rem;
+    }
+    
+    main {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    
+    .camera-container {
+        aspect-ratio: 3/4;
+    }
+    
+    .info-panel {
+        order: -1;
+        padding: 20px;
+    }
+    
+    .controls {
+        margin: 15px 0;
+    }
+    
+    .control-btn {
+        padding: 10px 25px;
+        font-size: 0.9rem;
+        min-width: 100px;
+    }
+    
+    .status-text {
+        font-size: 1.2rem;
+        padding: 12px;
+    }
+    
+    .history-scroll {
+        max-height: 250px;
+    }
+    
+    .history-item {
+        padding: 10px 12px;
+        font-size: 0.85rem;
+    }
+    
+    .overlay-message {
+        font-size: 1rem;
+        padding: 12px 20px;
+    }
+}
+
+/* 極小画面対応 */
+@media (max-width: 480px) {
+    .container {
+        padding: 10px;
+    }
+    
+    header h1 {
+        font-size: 1.5rem;
+    }
+    
+    .status-indicator {
+        padding: 6px 15px;
+        font-size: 0.9rem;
+    }
+    
+    .camera-container {
+        aspect-ratio: 1/1;
+    }
+    
+    .info-panel {
+        padding: 15px;
+    }
+    
+    .controls {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .control-btn {
+        width: 100%;
+        max-width: 200px;
+    }
+    
+    .status-text {
+        font-size: 1.1rem;
+        padding: 10px;
+    }
+    
+    .history-container h3 {
+        font-size: 1.1rem;
+    }
+    
+    .history-scroll {
+        max-height: 200px;
+    }
+    
+    .history-item {
+        padding: 8px 10px;
+        font-size: 0.8rem;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+    
+    .history-time {
+        min-width: auto;
+    }
+    
+    .history-status {
+        text-align: left;
+    }
+}
+
+/* 横向き対応（スマートフォン） */
+@media (max-width: 768px) and (orientation: landscape) {
+    main {
+        grid-template-columns: 1fr 300px;
+        gap: 15px;
+    }
+    
+    .camera-container {
+        aspect-ratio: 16/9;
+    }
+    
+    .info-panel {
+        order: 0;
+        padding: 15px;
+    }
+    
+    .history-scroll {
+        max-height: 200px;
+    }
+}
+
+/* ダークモード対応 */
+@media (prefers-color-scheme: dark) {
+    body {
+        background: linear-gradient(135deg, #2C3E50 0%, #34495E 100%);
+    }
+    
+    .info-panel {
+        background: #2C3E50;
+        color: #ECF0F1;
+    }
+    
+    .history-container h3 {
+        color: #ECF0F1;
+    }
+    
+    .history-scroll {
+        background: #34495E;
+        border-color: #4A5A6B;
+    }
+    
+    .history-item {
+        border-bottom-color: #4A5A6B;
+    }
+    
+    .history-item:hover {
+        background: #3A4A5B;
+    }
+    
+    .history-time {
+        color: #BDC3C7;
+    }
+    
+    .history-placeholder {
+        color: #95A5A6;
+    }
+}
+
+/* 高解像度ディスプレイ対応 */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .overlay-message {
+        text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    }
+    
+    .control-btn {
+        text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+}

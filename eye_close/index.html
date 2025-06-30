@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>目の開閉検出ゲーム</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>目の開閉検出システム</h1>
+            <div class="status-indicator" id="statusIndicator">
+                <span>システム初期化中...</span>
+            </div>
+        </header>
+
+        <main>
+            <div class="camera-container">
+                <video id="videoElement" autoplay playsinline muted></video>
+                <canvas id="overlayCanvas"></canvas>
+                <div class="overlay-message" id="overlayMessage">
+                    カメラを起動中...
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="startButton" class="control-btn">開始</button>
+                <button id="stopButton" class="control-btn" disabled>停止</button>
+            </div>
+
+            <div class="info-panel">
+                <div class="current-status" id="currentStatus">
+                    <div class="status-text">待機中</div>
+                    <div class="blink-counter" style="margin-top: 15px; padding: 10px; background: #e3f2fd; border-radius: 8px; text-align: center;">
+                        <strong>まばたき回数: <span id="blinkCounter">0</span></strong>
+                    </div>
+                </div>
+                
+                <div class="history-container">
+                    <h3>検出履歴</h3>
+                    <div class="history-scroll" id="historyScroll">
+                        <!-- 履歴がここに追加される -->
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <div class="tech-info">
+                <small>MediaPipe Face Landmarker + EAR 手法</small>
+            </div>
+        </footer>
+    </div>
+
+    <!-- TensorFlow.js関連のライブラリ -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection"></script>
+    
+    <!-- アプリケーションスクリプト -->
+    <script src="js/camera.js"></script>
+    <script src="js/faceDetector.js"></script>
+    <script src="js/gameUI.js"></script>
+    
+    <script>
+        // TensorFlow.jsの読み込み完了を待つ
+        function waitForTensorFlow() {
+            return new Promise((resolve, reject) => {
+                let attempts = 0;
+                const maxAttempts = 50; // 5秒間待機
+                
+                const checkTensorFlow = () => {
+                    attempts++;
+                    
+                    if (typeof faceLandmarksDetection !== 'undefined') {
+                        console.log('TensorFlow.js Face Landmarks Detection が読み込まれました');
+                        resolve();
+                    } else if (attempts >= maxAttempts) {
+                        reject(new Error('TensorFlow.js の読み込みがタイムアウトしました'));
+                    } else {
+                        setTimeout(checkTensorFlow, 100);
+                    }
+                };
+                
+                checkTensorFlow();
+            });
+        }
+
+        // アプリケーションの初期化
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                // UIマネージャー初期化
+                const ui = new GameUI();
+                ui.updateStatus('MediaPipe読み込み中...', 'info');
+                
+                // TensorFlow.jsの読み込み完了を待機
+                await waitForTensorFlow();
+                
+                // カメラマネージャー初期化
+                const camera = new CameraManager();
+                
+                // 顔検出マネージャー初期化
+                const faceDetector = new FaceDetector();
+                
+                // システム初期化
+                ui.updateStatus('システム初期化中...', 'info');
+                await faceDetector.initialize();
+                ui.updateStatus('システム準備完了', 'success');
+                
+                // 開始ボタンのイベントリスナー
+                document.getElementById('startButton').addEventListener('click', async () => {
+                    try {
+                        await camera.start();
+                        await faceDetector.start(camera.getVideoElement());
+                        ui.startHistoryUpdates();
+                        
+                        document.getElementById('startButton').disabled = true;
+                        document.getElementById('stopButton').disabled = false;
+                        ui.updateStatus('検出中...', 'active');
+                    } catch (error) {
+                        ui.updateStatus('エラー: ' + error.message, 'error');
+                    }
+                });
+                
+                // 停止ボタンのイベントリスナー
+                document.getElementById('stopButton').addEventListener('click', () => {
+                    camera.stop();
+                    faceDetector.stop();
+                    ui.stopHistoryUpdates();
+                    
+                    document.getElementById('startButton').disabled = false;
+                    document.getElementById('stopButton').disabled = true;
+                    ui.updateStatus('停止', 'inactive');
+                });
+                
+                // 検出結果の受信
+                faceDetector.onDetectionResult = (result) => {
+                    ui.updateCurrentStatus(result);
+                };
+                
+                // まばたき検出の受信
+                faceDetector.onBlinkDetected = (blinkData) => {
+                    console.log('まばたき検出:', blinkData);
+                    document.getElementById('blinkCounter').textContent = blinkData.count;
+                    ui.addHistory(`まばたき検出 #${blinkData.count} (EAR: ${blinkData.ear.toFixed(3)})`);
+                };
+                
+            } catch (error) {
+                console.error('初期化エラー:', error);
+                document.getElementById('statusIndicator').innerHTML = 
+                    '<span style="color: red;">初期化に失敗しました: ' + error.message + '</span>';
+            }
+        });
+    </script>
+</body>
+</html>
