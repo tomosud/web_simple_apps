@@ -23,29 +23,12 @@ class MarkdownRenderer {
         }
 
         let html = this.content;
-        let tocItems = [];
 
-        // Headers with ID generation for TOC
-        html = html.replace(/^#### (.*$)/gm, (match, text) => {
-            const id = this.generateId(text);
-            tocItems.push({ level: 4, text: text, id: id });
-            return `<h4 id="${id}">${text}</h4>`;
-        });
-        html = html.replace(/^### (.*$)/gm, (match, text) => {
-            const id = this.generateId(text);
-            tocItems.push({ level: 3, text: text, id: id });
-            return `<h3 id="${id}">${text}</h3>`;
-        });
-        html = html.replace(/^## (.*$)/gm, (match, text) => {
-            const id = this.generateId(text);
-            tocItems.push({ level: 2, text: text, id: id });
-            return `<h2 id="${id}">${text}</h2>`;
-        });
-        html = html.replace(/^# (.*$)/gm, (match, text) => {
-            const id = this.generateId(text);
-            tocItems.push({ level: 1, text: text, id: id });
-            return `<h1 id="${id}">${text}</h1>`;
-        });
+        // Headers (simple without IDs)
+        html = html.replace(/^#### (.*$)/gm, '<h4>$1</h4>');
+        html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+        html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+        html = html.replace(/^# (.*$)/gm, '<h1>$1</h1>');
 
         // Bold text
         html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
@@ -121,32 +104,7 @@ class MarkdownRenderer {
         html = html.replace(/<p><\/p>/g, '');
         html = html.replace(/<p><br><\/p>/g, '');
 
-        // Generate TOC
-        const toc = this.generateTOC(tocItems);
-        
-        return toc + html;
-    }
-
-    generateId(text) {
-        return text.toLowerCase()
-            .replace(/[^\w\s-]/g, '')
-            .replace(/\s+/g, '-')
-            .replace(/-+/g, '-')
-            .trim();
-    }
-
-    generateTOC(tocItems) {
-        if (tocItems.length === 0) return '';
-        
-        let toc = '<div class="table-of-contents"><h3>目次</h3><ul>';
-        
-        for (const item of tocItems) {
-            const indent = '&nbsp;'.repeat((item.level - 1) * 4);
-            toc += `<li>${indent}<a href="#${item.id}">${item.text}</a></li>`;
-        }
-        
-        toc += '</ul></div>';
-        return toc;
+        return html;
     }
 
     async renderMarkdownFile(filePath, targetElementId) {
