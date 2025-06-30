@@ -31,10 +31,9 @@ class GameLogic {
         this.money = this.costManager ? this.costManager.getInitialMoney() : 30000;
         this.timer = 30;
         this.lives = 4;
-        // ステージ3の音楽が再生中でなければステージ1にリセット
-        if (!this.isStage3MusicPlaying) {
-            this.stage = 1;
-        }
+        // ゲームオーバー後のリスタート時は常にステージ1にリセット
+        // （音楽と字幕は継続するが、ステージ数は必ずリセット）
+        this.stage = 1;
         this.isGameOver = false;
         
         // ゲームパラメータをリセット（ゲームオーバー後のリスタート用）
