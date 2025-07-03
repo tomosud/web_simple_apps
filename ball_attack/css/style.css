@@ -20,6 +20,8 @@ body {
 #gameCanvas {
     width: 100%;
     height: 100%;
+    touch-action: none; /* タッチによるスクロール/ズームを無効化 */
+    user-select: none;  /* テキスト選択を無効化 */
 }
 
 #ui {

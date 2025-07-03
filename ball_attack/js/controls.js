@@ -63,10 +63,10 @@ class EarthControls {
         document.addEventListener('mouseup', this.boundHandlers.onPointerUp);
         this.domElement.addEventListener('wheel', this.boundHandlers.onWheel);
         
-        // タッチイベント
-        this.domElement.addEventListener('touchstart', this.boundHandlers.onTouchStart);
-        document.addEventListener('touchmove', this.boundHandlers.onTouchMove);
-        document.addEventListener('touchend', this.boundHandlers.onTouchEnd);
+        // タッチイベント（passive: false で preventDefault() を有効化）
+        this.domElement.addEventListener('touchstart', this.boundHandlers.onTouchStart, { passive: false });
+        this.domElement.addEventListener('touchmove', this.boundHandlers.onTouchMove, { passive: false });
+        this.domElement.addEventListener('touchend', this.boundHandlers.onTouchEnd, { passive: false });
         
         // コンテキストメニューを無効化
         this.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -111,12 +111,19 @@ class EarthControls {
         
         if (event.touches.length === 1) {
             // 単一タッチ - 回転
-            this.onPointerDown(event.touches[0]);
+            this.isPointerDown = true;
+            this.isRotating = false;
+            
+            const touch = event.touches[0];
+            const pointer = this.getTouchPosition(touch);
+            this.lastPointer.copy(pointer);
+            this.currentPointer.copy(pointer);
+            
         } else if (event.touches.length === 2) {
             // マルチタッチ - ズーム
             this.isPointerDown = false;
             this.isRotating = false;
-            this.velocity.set(0, 0);
+            this.rotationVelocity.set(0, 0);
             
             const touch1 = event.touches[0];
             const touch2 = event.touches[1];
@@ -130,9 +137,19 @@ class EarthControls {
     onTouchMove(event) {
         event.preventDefault();
         
-        if (event.touches.length === 1) {
+        if (event.touches.length === 1 && this.isPointerDown) {
             // 単一タッチ - 回転
-            this.onPointerMove(event.touches[0]);
+            const touch = event.touches[0];
+            const pointer = this.getTouchPosition(touch);
+            
+            const deltaX = pointer.x - this.lastPointer.x;
+            const deltaY = pointer.y - this.lastPointer.y;
+            
+            // カメラを軌道移動
+            this.rotateCamera(deltaX, deltaY);
+            
+            this.lastPointer.copy(pointer);
+            
         } else if (event.touches.length === 2) {
             // マルチタッチ - ズーム
             const touch1 = event.touches[0];
@@ -155,10 +172,18 @@ class EarthControls {
         event.preventDefault();
         
         if (event.touches.length === 0) {
-            this.onPointerUp(event);
+            // 全てのタッチが終了
+            this.isPointerDown = false;
+            this.isRotating = Math.abs(this.rotationVelocity.x) > 0.01 || Math.abs(this.rotationVelocity.y) > 0.01;
         } else if (event.touches.length === 1) {
             // マルチタッチから単一タッチに変更
-            this.onPointerDown(event.touches[0]);
+            this.isPointerDown = true;
+            this.isRotating = false;
+            
+            const touch = event.touches[0];
+            const pointer = this.getTouchPosition(touch);
+            this.lastPointer.copy(pointer);
+            this.currentPointer.copy(pointer);
         }
     }
     
@@ -176,6 +201,15 @@ class EarthControls {
         );
     }
     
+    // タッチ座標取得のための専用メソッド
+    getTouchPosition(touch) {
+        const rect = this.domElement.getBoundingClientRect();
+        return new THREE.Vector2(
+            touch.clientX - rect.left,
+            touch.clientY - rect.top
+        );
+    }
+    
     rotateCamera(deltaX, deltaY) {
         // スクリーンスペースの直感的な操作
         // 横ドラッグ = カメラの水平移動（theta）
@@ -187,7 +221,7 @@ class EarthControls {
         
         // 蓄積された力を速度に変換（重い石の効果）
         this.rotationVelocity.x += this.accumulatedForce.x * this.inertiaFactor;
-        this.rotationVelocity.y -= this.accumulatedForce.y * this.inertiaFactor; // 符号反転で直感的な縦操作
+        this.rotationVelocity.y += this.accumulatedForce.y * this.inertiaFactor; // 二重符号反転を修正
         
         // シンプルな重い挙動（複雑なモーメンタム蓄積を削除）
         
@@ -211,8 +245,19 @@ class EarthControls {
         this.sphericalCoords.theta += this.rotationVelocity.x * 0.01;
         this.sphericalCoords.phi -= this.rotationVelocity.y * 0.01;  // 符号反転で直感的な縦操作
         
-        // phi（垂直角度）の制限を緩和（ジンバルロック軽減）
-        this.sphericalCoords.phi = Math.max(0.01, Math.min(Math.PI - 0.01, this.sphericalCoords.phi));
+        // 極地通過時の特別処理（回転継続）
+        if (this.sphericalCoords.phi <= 0.01) {
+            // 北極を越えて南側に移動
+            this.sphericalCoords.phi = 0.01;
+            this.sphericalCoords.theta += Math.PI; // 180度回転
+        } else if (this.sphericalCoords.phi >= Math.PI - 0.01) {
+            // 南極を越えて北側に移動
+            this.sphericalCoords.phi = Math.PI - 0.01;
+            this.sphericalCoords.theta += Math.PI; // 180度回転
+        }
+        
+        // theta の正規化
+        this.sphericalCoords.theta = this.sphericalCoords.theta % (2 * Math.PI);
         
         // カメラ位置を球面座標から計算
         this.updateCameraFromSpherical();
@@ -229,13 +274,8 @@ class EarthControls {
         const y = this.sphericalCoords.radius * cosPhi;
         const z = this.sphericalCoords.radius * sinPhi * sinTheta;
         
-        // 数値精度の問題を回避（極地付近の特別処理）
-        if (Math.abs(sinPhi) < 0.0001) {
-            // 極地付近では特別処理
-            this.camera.position.set(0, this.sphericalCoords.radius * Math.sign(cosPhi), 0);
-        } else {
-            this.camera.position.set(x, y, z);
-        }
+        // 極地での回転継続のため、標準的な位置設定を使用
+        this.camera.position.set(x, y, z);
         
         // カメラを地球の中心に向ける
         this.camera.lookAt(0, 0, 0);
@@ -312,13 +352,16 @@ class EarthControls {
     // 破棄
     dispose() {
         if (this.boundHandlers) {
+            // マウスイベント解除
             this.domElement.removeEventListener('mousedown', this.boundHandlers.onPointerDown);
             document.removeEventListener('mousemove', this.boundHandlers.onPointerMove);
             document.removeEventListener('mouseup', this.boundHandlers.onPointerUp);
             this.domElement.removeEventListener('wheel', this.boundHandlers.onWheel);
-            this.domElement.removeEventListener('touchstart', this.boundHandlers.onTouchStart);
-            document.removeEventListener('touchmove', this.boundHandlers.onTouchMove);
-            document.removeEventListener('touchend', this.boundHandlers.onTouchEnd);
+            
+            // タッチイベント解除（passive: false オプション付き）
+            this.domElement.removeEventListener('touchstart', this.boundHandlers.onTouchStart, { passive: false });
+            this.domElement.removeEventListener('touchmove', this.boundHandlers.onTouchMove, { passive: false });
+            this.domElement.removeEventListener('touchend', this.boundHandlers.onTouchEnd, { passive: false });
         }
     }
 }
