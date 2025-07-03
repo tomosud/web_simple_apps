@@ -127,8 +127,8 @@ class BallAttackGame {
     }
     
     setupControls() {
-        // 地球の回転制御
-        this.controls = new EarthControls(this.earth, this.camera, this.renderer);
+        // 地球の回転制御（シンプルな軌道ベクトル方式）
+        this.controls = new SimpleEarthControls(this.earth, this.camera, this.renderer);
         debugLog('地球制御システムが初期化されました');
     }
     
