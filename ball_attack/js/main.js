@@ -55,7 +55,7 @@ class BallAttackGame {
             0.1,
             1000
         );
-        this.camera.position.set(0, 0, 5);
+        this.camera.position.set(0, 0, 2.5);
         
         // レンダラー作成
         this.renderer = new THREE.WebGLRenderer({ 
@@ -101,7 +101,7 @@ class BallAttackGame {
         // 地球のテクスチャを読み込み
         const textureLoader = new THREE.TextureLoader();
         this.earthTexture = textureLoader.load(
-            'assets/eo_base_2020_clean_720x360.jpg',
+            'assets/world.topo.bathy.200412.3x5400x2700.jpg',
             (texture) => {
                 debugLog('地球テクスチャが読み込まれました');
             },
@@ -218,10 +218,7 @@ class BallAttackGame {
             this.performanceMonitor.update();
         }
         
-        // 地球の自動回転（非常にゆっくり）
-        if (this.earth && !this.controls.isPointerDown) {
-            this.earth.rotation.y += 0.0005 * deltaTime;
-        }
+        // 地球の自動回転は削除
     }
     
     render() {

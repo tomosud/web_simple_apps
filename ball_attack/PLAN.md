@@ -4,25 +4,34 @@
 
 ### フェーズ別実装計画
 
-#### Phase 1: 基本地球システム (4-6時間)
+#### Phase 1: 基本地球システム (4-6時間) ✅ **完了**
 **目標**: 回転可能な地球の表示
 
 **実装タスク**:
-1. **基本セットアップ**
+1. **基本セットアップ** ✅
    - Three.js シーン、カメラ、レンダラー初期化
    - `sample/js/main.js` のセットアップ部分を参考
    - レスポンシブキャンバス設定
 
-2. **地球オブジェクト**
+2. **地球オブジェクト** ✅
    - SphereGeometry (半径: 1, segments: 64)
-   - TextureLoader で `assets/eo_base_2020_clean_720x360.jpg` 読み込み
-   - MeshBasicMaterial で地球マテリアル作成
+   - TextureLoader で `assets/world.topo.bathy.200412.3x5400x2700.jpg` 読み込み
+   - MeshLambertMaterial で地球マテリアル作成
 
-3. **回転制御システム**
-   - マウス/タッチドラッグ検知
-   - 球面座標系での回転計算
-   - 慣性システム実装（減衰係数: 0.95）
-   - ズーム制御（距離: 2-10）
+3. **回転制御システム** ✅
+   - 地球固定・カメラ軌道移動方式を採用
+   - 球面座標系でのカメラ制御
+   - 超重い石の物理挙動（慣性係数: 0.02、抵抗係数: 0.995）
+   - ズーム制御（距離: 1.5-8）
+   - ジンバルロック問題を根本解決
+
+**実装完了内容**:
+- 地球固定・カメラ軌道移動システム
+- スクリーンスペースの直感的な操作
+- 超重い石の物理挙動（動き始めにくく、慣性で長時間回転）
+- クォータニオンベースでジンバルロック回避
+- レスポンシブデザイン対応
+- キーボードショートカット（F: リセット、D: デバッグ、R: ゲームリセット）
 
 **参考コード**: `sample/js/main.js` のカメラ制御部分
 
@@ -191,23 +200,31 @@ function latLngToCartesian(lat, lng, radius = 1) {
 ### ファイル構成
 ```
 ball_attack/
-├── index.html
+├── index.html              ✅ # メインHTML
 ├── js/
-│   ├── main.js              # メインゲームクラス
-│   ├── controls.js          # 地球回転制御
-│   ├── enemies.js           # 敵システム
-│   ├── weapons.js           # 弾システム
-│   ├── collision.js         # 当たり判定
-│   ├── ui.js               # UIシステム
-│   ├── effects.js          # エフェクトシステム
-│   ├── performance.js      # パフォーマンス最適化
-│   └── utils.js            # ユーティリティ関数
+│   ├── main.js            ✅ # メインゲームクラス
+│   ├── controls.js        ✅ # カメラ軌道制御システム
+│   ├── utils.js           ✅ # ユーティリティ関数
+│   ├── enemies.js          # 敵システム (Phase 2)
+│   ├── weapons.js          # 弾システム (Phase 3)
+│   ├── collision.js        # 当たり判定 (Phase 4)
+│   ├── ui.js              # UIシステム (Phase 5)
+│   ├── effects.js         # エフェクトシステム (Phase 6)
+│   └── performance.js     # パフォーマンス最適化 (Phase 6)
 ├── css/
-│   └── style.css           # メインスタイル
+│   └── style.css          ✅ # メインスタイル
 └── assets/
-    ├── eo_base_2020_clean_720x360.jpg  # 地球テクスチャ
+    ├── world.topo.bathy.200412.3x5400x2700.jpg ✅ # 高解像度地形テクスチャ
+    ├── eo_base_2020_clean_720x360.jpg  # 旧テクスチャ（参考用）
     └── sounds/             # サウンドファイル (Phase 6)
 ```
+
+**Phase 1完了ファイル**:
+- ✅ `index.html` - 基本HTML構造、レスポンシブデザイン
+- ✅ `css/style.css` - ゲームUI、モバイル対応スタイル
+- ✅ `js/main.js` - ゲームメインクラス、Three.jsセットアップ
+- ✅ `js/controls.js` - カメラ軌道制御、物理挙動システム
+- ✅ `js/utils.js` - ユーティリティ関数、パフォーマンス監視
 
 ### sample/ フォルダ活用箇所
 1. **Three.js セットアップ**: `sample/js/main.js` (1-100行目)

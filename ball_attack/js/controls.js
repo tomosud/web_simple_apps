@@ -16,20 +16,33 @@ class EarthControls {
         this.isPointerDown = false;
         
         // カメラの位置とズーム
-        this.minDistance = 2;
-        this.maxDistance = 10;
-        this.currentDistance = 5;
-        this.targetDistance = 5;
+        this.minDistance = 1.5;
+        this.maxDistance = 8;
+        this.currentDistance = 2.5;
+        this.targetDistance = 2.5;
         
-        // 感度設定
-        this.rotationSensitivity = 2.0;
-        this.zoomSensitivity = 0.5;
+        // 感度設定（シンプルな重い挙動）
+        this.rotationSensitivity = 0.1;  // 基本感度
+        this.zoomSensitivity = 0.3;
+        this.inertiaFactor = 0.05;  // 重い感触
+        this.damping = 0.98;  // シンプルな減衰
+        this.startThreshold = 0.5;  // 動き始めの閾値を緩和
+        
+        // カメラ軌道制御（球面座標系）
+        this.sphericalCoords = {
+            theta: 0,      // 水平角度（経度）
+            phi: Math.PI / 2,  // 垂直角度（緯度、π/2 = 赤道）
+            radius: this.currentDistance
+        };
+        
+        this.rotationVelocity = new THREE.Vector2(0, 0);
+        this.accumulatedForce = new THREE.Vector2(0, 0);  // 蓄積された力
         
         // イベントリスナーを設定
         this.setupEventListeners();
         
         // カメラの初期位置を設定
-        this.updateCameraPosition();
+        this.updateCameraFromSpherical();
     }
     
     setupEventListeners() {
@@ -63,7 +76,7 @@ class EarthControls {
         event.preventDefault();
         this.isPointerDown = true;
         this.isRotating = false;
-        this.velocity.set(0, 0);
+        // 重い石：既存の慣性は維持（急に止まらない）
         
         const pointer = this.getPointerPosition(event);
         this.lastPointer.copy(pointer);
@@ -79,11 +92,8 @@ class EarthControls {
         const deltaX = pointer.x - this.lastPointer.x;
         const deltaY = pointer.y - this.lastPointer.y;
         
-        // 地球を回転
-        this.rotateEarth(deltaX, deltaY);
-        
-        // 速度を更新（慣性用）
-        this.velocity.set(deltaX, deltaY);
+        // カメラを軌道移動（重い操作感）
+        this.rotateCamera(deltaX, deltaY);
         
         this.lastPointer.copy(pointer);
     }
@@ -93,7 +103,7 @@ class EarthControls {
         
         event.preventDefault();
         this.isPointerDown = false;
-        this.isRotating = Math.abs(this.velocity.x) > 0.01 || Math.abs(this.velocity.y) > 0.01;
+        this.isRotating = Math.abs(this.rotationVelocity.x) > 0.01 || Math.abs(this.rotationVelocity.y) > 0.01;
     }
     
     onTouchStart(event) {
@@ -166,16 +176,72 @@ class EarthControls {
         );
     }
     
-    rotateEarth(deltaX, deltaY) {
-        // Y軸周りの回転（水平方向）
-        this.earth.rotation.y += deltaX * this.rotationSensitivity * 0.01;
+    rotateCamera(deltaX, deltaY) {
+        // スクリーンスペースの直感的な操作
+        // 横ドラッグ = カメラの水平移動（theta）
+        // 縦ドラッグ = カメラの垂直移動（phi）- ドラッグ方向に合わせる
         
-        // X軸周りの回転（垂直方向）- 制限付き
-        this.earth.rotation.x += deltaY * this.rotationSensitivity * 0.01;
-        this.earth.rotation.x = Math.max(
-            -Math.PI / 2,
-            Math.min(Math.PI / 2, this.earth.rotation.x)
-        );
+        // 力を蓄積（超重い石は力が必要）
+        this.accumulatedForce.x += Math.abs(deltaX) > this.startThreshold ? deltaX * this.rotationSensitivity : 0;
+        this.accumulatedForce.y += Math.abs(deltaY) > this.startThreshold ? deltaY * this.rotationSensitivity : 0;
+        
+        // 蓄積された力を速度に変換（重い石の効果）
+        this.rotationVelocity.x += this.accumulatedForce.x * this.inertiaFactor;
+        this.rotationVelocity.y -= this.accumulatedForce.y * this.inertiaFactor; // 符号反転で直感的な縦操作
+        
+        // シンプルな重い挙動（複雑なモーメンタム蓄積を削除）
+        
+        // 速度制限
+        const maxVelocity = 2.0;
+        this.rotationVelocity.x = Math.max(-maxVelocity, Math.min(maxVelocity, this.rotationVelocity.x));
+        this.rotationVelocity.y = Math.max(-maxVelocity, Math.min(maxVelocity, this.rotationVelocity.y));
+        
+        // 蓄積された力をリセット
+        this.accumulatedForce.set(0, 0);
+        
+        // カメラの軌道移動を適用
+        this.applyCameraOrbit();
+    }
+    
+    applyCameraOrbit() {
+        // スクリーンスペースの直感的な操作を球面座標に変換
+        // 横ドラッグ = theta（水平角度）の変更
+        // 縦ドラッグ = phi（垂直角度）の変更 - 直感的な方向
+        
+        this.sphericalCoords.theta += this.rotationVelocity.x * 0.01;
+        this.sphericalCoords.phi -= this.rotationVelocity.y * 0.01;  // 符号反転で直感的な縦操作
+        
+        // phi（垂直角度）の制限を緩和（ジンバルロック軽減）
+        this.sphericalCoords.phi = Math.max(0.01, Math.min(Math.PI - 0.01, this.sphericalCoords.phi));
+        
+        // カメラ位置を球面座標から計算
+        this.updateCameraFromSpherical();
+    }
+    
+    updateCameraFromSpherical() {
+        // より安定した球面座標変換
+        const sinPhi = Math.sin(this.sphericalCoords.phi);
+        const cosPhi = Math.cos(this.sphericalCoords.phi);
+        const sinTheta = Math.sin(this.sphericalCoords.theta);
+        const cosTheta = Math.cos(this.sphericalCoords.theta);
+        
+        const x = this.sphericalCoords.radius * sinPhi * cosTheta;
+        const y = this.sphericalCoords.radius * cosPhi;
+        const z = this.sphericalCoords.radius * sinPhi * sinTheta;
+        
+        // 数値精度の問題を回避（極地付近の特別処理）
+        if (Math.abs(sinPhi) < 0.0001) {
+            // 極地付近では特別処理
+            this.camera.position.set(0, this.sphericalCoords.radius * Math.sign(cosPhi), 0);
+        } else {
+            this.camera.position.set(x, y, z);
+        }
+        
+        // カメラを地球の中心に向ける
+        this.camera.lookAt(0, 0, 0);
+        
+        // 距離を同期
+        this.currentDistance = this.sphericalCoords.radius;
     }
     
     zoomCamera(delta) {
@@ -186,30 +252,35 @@ class EarthControls {
         );
     }
     
-    updateCameraPosition() {
-        // カメラの距離を滑らかに更新
-        this.currentDistance = lerp(this.currentDistance, this.targetDistance, 0.1);
+    updateCameraZoom() {
+        // ズーム距離を滑らかに更新
+        this.sphericalCoords.radius = lerp(this.sphericalCoords.radius, this.targetDistance, 0.1);
         
-        // カメラを地球から一定距離に配置
-        this.camera.position.set(0, 0, this.currentDistance);
-        this.camera.lookAt(0, 0, 0);
+        // カメラ位置を更新
+        this.updateCameraFromSpherical();
     }
     
     update() {
-        // 慣性による回転
-        if (this.isRotating && !this.isPointerDown) {
-            this.rotateEarth(this.velocity.x, this.velocity.y);
-            this.velocity.multiplyScalar(this.damping);
+        // 常に回転速度を適用（超重い石の継続的な動き）
+        if (Math.abs(this.rotationVelocity.x) > 0.0001 || Math.abs(this.rotationVelocity.y) > 0.0001) {
+            this.applyCameraOrbit();
+        }
+        
+        // ドラッグ中でない場合のみ、シンプルな減衰
+        if (!this.isPointerDown) {
+            this.rotationVelocity.multiplyScalar(this.damping);
             
-            // 慣性が十分小さくなったら停止
-            if (Math.abs(this.velocity.x) < 0.001 && Math.abs(this.velocity.y) < 0.001) {
+            // 小さくなったら完全停止
+            if (Math.abs(this.rotationVelocity.x) < 0.001 && Math.abs(this.rotationVelocity.y) < 0.001) {
                 this.isRotating = false;
-                this.velocity.set(0, 0);
+                this.rotationVelocity.set(0, 0);
+            } else {
+                this.isRotating = true;
             }
         }
         
-        // カメラ位置の更新
-        this.updateCameraPosition();
+        // ズーム変更をカメラ軌道に反映
+        this.updateCameraZoom();
     }
     
     // 地球を指定した位置に向ける
@@ -224,10 +295,18 @@ class EarthControls {
     
     // リセット
     reset() {
-        this.earth.rotation.set(0, 0, 0);
-        this.targetDistance = 5;
-        this.velocity.set(0, 0);
+        // 地球は固定（リセット不要）
+        // カメラを初期位置に戻す
+        this.sphericalCoords.theta = 0;
+        this.sphericalCoords.phi = Math.PI / 2;
+        this.sphericalCoords.radius = 2.5;
+        this.targetDistance = 2.5;
+        this.rotationVelocity.set(0, 0);
+        this.accumulatedForce.set(0, 0);
         this.isRotating = false;
+        
+        // カメラ位置を更新
+        this.updateCameraFromSpherical();
     }
     
     // 破棄
