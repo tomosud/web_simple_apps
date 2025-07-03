@@ -127,9 +127,9 @@ class BallAttackGame {
     }
     
     setupControls() {
-        // 地球の回転制御（シンプルな軌道ベクトル方式）
-        this.controls = new SimpleEarthControls(this.earth, this.camera, this.renderer);
-        debugLog('地球制御システムが初期化されました');
+        // 地球の回転制御（アークボール方式）
+        this.controls = new ArcballControls(this.earth, this.camera, this.renderer);
+        debugLog('アークボール制御システムが初期化されました');
     }
     
     setupEventListeners() {
@@ -208,7 +208,7 @@ class BallAttackGame {
     }
     
     update(deltaTime) {
-        // 地球制御の更新
+        // 地球制御の更新（アークボール慣性システム）
         if (this.controls) {
             this.controls.update();
         }

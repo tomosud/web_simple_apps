@@ -113,6 +113,10 @@ ball_attack/
 - **数値安定性向上**: 極地での回転停止問題を大幅軽減
 - **レスポンシブタッチ**: touch-action: none、user-select: noneでタッチ操作最適化
 
+**現在の課題**:
+- **操作感の問題**: 現在の実装は「カメラが地球の周りを回転」する動作で、「地球が回転している」感覚ではない
+- **解決予定**: Three.js公式のArcballControlsまたはKen Shoemakeアルゴリズムを使用してGoogle Earth風の自然な操作感を実現する予定
+
 ## 動作環境
 - モダンブラウザ（Chrome, Firefox, Safari, Edge）
 - WebGL対応必須
