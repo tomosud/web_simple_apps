@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ball Attack - 地球シューティング</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="container">
+        <div id="loading" class="loading">地球を準備中...</div>
+        
+        <div id="ui" style="display: none;">
+            <div class="game-info">
+                <div class="score">スコア: <span id="score">0</span></div>
+                <div class="enemies">敵撃墜: <span id="enemyCount">0</span></div>
+                <div class="level">レベル: <span id="level">1</span></div>
+            </div>
+            
+            <div class="instructions">
+                <div>地球をドラッグして回転</div>
+                <div>弾は自動発射</div>
+                <div>敵を撃墜してスコアを獲得</div>
+            </div>
+        </div>
+
+        <div id="gameCanvas"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/controls.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
