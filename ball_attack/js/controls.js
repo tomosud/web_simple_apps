@@ -97,11 +97,11 @@ class GlobeDragCameraControls {
     }
 
     updateCamera() {
-        // 球面座標系でカメラ位置を計算（制限なし）
+        // 球面座標系でカメラ位置を計算
         const r = this.radius;
-        const x = r * Math.sin(this.phi) * Math.cos(this.theta);
-        const y = r * Math.cos(this.phi);
-        const z = r * Math.sin(this.phi) * Math.sin(this.theta);
+        const x = r * Math.cos(this.phi) * Math.cos(this.theta);
+        const y = r * Math.sin(this.phi);
+        const z = r * Math.cos(this.phi) * Math.sin(this.theta);
 
         this.camera.position.set(x, y, z);
         this.camera.lookAt(0, 0, 0);
@@ -124,9 +124,13 @@ class GlobeDragCameraControls {
         this.velocity.theta *= this.friction;
         this.velocity.phi *= this.friction;
         
-        // 位置を更新（制限なし）
+        // 位置を更新
         this.theta += this.velocity.theta;
         this.phi += this.velocity.phi;
+        
+        // phiを制限して極付近での反転を防ぐ
+        const epsilon = 0.01;
+        this.phi = THREE.MathUtils.clamp(this.phi, -Math.PI/2 + epsilon, Math.PI/2 - epsilon);
         
         // カメラ位置を更新
         this.updateCamera();
