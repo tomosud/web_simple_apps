@@ -8,6 +8,7 @@ class BallAttackGame {
         this.camera = null;
         this.renderer = null;
         this.earth = null;
+        this.satellite = null;
         this.controls = null;
         this.performanceMonitor = null;
         
@@ -25,6 +26,10 @@ class BallAttackGame {
         this.earthRadius = 1;
         this.earthTexture = null;
         
+        // 人工衛星の設定
+        this.satelliteOrbitRadius = 1.3;
+        this.satellitePosition = new THREE.Vector3(0, 0, this.satelliteOrbitRadius);
+        
         this.init();
     }
     
@@ -32,6 +37,7 @@ class BallAttackGame {
         try {
             this.setupScene();
             this.setupEarth();
+            this.setupSatellite();
             this.setupControls();
             this.setupEventListeners();
             this.setupPerformanceMonitor();
@@ -48,14 +54,15 @@ class BallAttackGame {
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x000a0a);
         
-        // カメラ作成
+        // カメラ作成（固定位置）
         this.camera = new THREE.PerspectiveCamera(
             75,
             window.innerWidth / window.innerHeight,
             0.1,
             1000
         );
-        this.camera.position.set(0, 0, 2.5);
+        this.camera.position.set(0, 0, 3.5);
+        this.camera.lookAt(0, 0, 0);
         
         // レンダラー作成
         this.renderer = new THREE.WebGLRenderer({ 
@@ -126,13 +133,37 @@ class BallAttackGame {
         debugLog('地球オブジェクトが作成されました');
     }
     
-    setupControls() {
-        // 地球の回転制御（レール式カメラコントロール）
-        this.controls = new GlobeDragCameraControls(this.camera, this.renderer.domElement, {
-            radius:    this.earthRadius, // 地球半径を既存変数で
-            camOffset: 1.5,              // 地表からの高さ（お好みで）
+    setupSatellite() {
+        // 人工衛星のジオメトリ（円錐）
+        const satelliteGeometry = new THREE.ConeGeometry(0.05, 0.15, 8);
+        
+        // 人工衛星のマテリアル
+        const satelliteMaterial = new THREE.MeshLambertMaterial({
+            color: 0x00ff00
         });
-        debugLog('GlobeDragCameraControlsが初期化されました');
+        
+        // 人工衛星メッシュ作成
+        this.satellite = new THREE.Mesh(satelliteGeometry, satelliteMaterial);
+        this.satellite.castShadow = true;
+        
+        // 初期位置に配置
+        this.satellite.position.copy(this.satellitePosition);
+        
+        // 地球の中心を向く
+        this.satellite.lookAt(0, 0, 0);
+        
+        this.scene.add(this.satellite);
+        
+        debugLog('人工衛星オブジェクトが作成されました');
+    }
+    
+    setupControls() {
+        // 人工衛星の軌道制御（クォータニオンベース）
+        this.controls = new SatelliteOrbitControls(this.satellite, this.renderer.domElement, {
+            orbitRadius: this.satelliteOrbitRadius,
+            dragScale: 0.005
+        });
+        debugLog('SatelliteOrbitControlsが初期化されました');
     }
     
     setupEventListeners() {
@@ -156,7 +187,7 @@ class BallAttackGame {
     onKeyDown(event) {
         switch(event.code) {
             case 'KeyF':
-                // 視点リセット
+                // 人工衛星位置リセット
                 this.controls.reset();
                 break;
             case 'KeyD':
@@ -211,17 +242,15 @@ class BallAttackGame {
     }
     
     update(deltaTime) {
-        // 地球制御の更新（慣性物理システム）
+        // 人工衛星の軌道制御の更新
         if (this.controls) {
-            this.controls.update(deltaTime); // 物理システムにdeltaTimeを渡す
+            this.controls.update();
         }
         
         // パフォーマンス監視
         if (this.performanceMonitor) {
             this.performanceMonitor.update();
         }
-        
-        // 地球の自動回転は削除
     }
     
     render() {
