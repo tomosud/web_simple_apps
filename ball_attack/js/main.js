@@ -18,6 +18,12 @@ class BallAttackGame {
         this.enemyCount = 0;
         this.level = 1;
         
+        // モード切り替え
+        this.debugMode = false;
+        
+        // カメラマウント
+        this.cameraMount = null;
+        
         // アニメーション
         this.lastTime = 0;
         this.animationId = null;
@@ -62,7 +68,7 @@ class BallAttackGame {
             1000
         );
         this.camera.position.set(0, 0, 3.5);
-        this.camera.lookAt(0, 0, 0);
+        // lookAtは使わない（親子付けシステムで制御）
         
         // レンダラー作成
         this.renderer = new THREE.WebGLRenderer({ 
@@ -149,12 +155,28 @@ class BallAttackGame {
         // 初期位置に配置
         this.satellite.position.copy(this.satellitePosition);
         
-        // 地球の中心を向く
-        this.satellite.lookAt(0, 0, 0);
+        // 姿勢は軌道制御システムで管理（lookAtは使わない）
         
         this.scene.add(this.satellite);
         
+        // カメラの親子付けセットアップ
+        this.setupCameraAttachment();
+        
         debugLog('人工衛星オブジェクトが作成されました');
+    }
+    
+    setupCameraAttachment() {
+        // カメラ用のオブジェクトを作成（人工衛星の地球側に配置）
+        this.cameraMount = new THREE.Object3D();
+        
+        // 人工衛星の地球側にカメラマウントを配置
+        // 人工衛星の円錐は地球を向いているので、その後ろ側（地球側）にカメラを配置
+        this.cameraMount.position.set(0, 0, -0.2);  // 人工衛星の地球側に配置
+        
+        // カメラマウントを人工衛星の子にする
+        this.satellite.add(this.cameraMount);
+        
+        debugLog('カメラマウントが作成されました');
     }
     
     setupControls() {
@@ -227,9 +249,8 @@ class BallAttackGame {
                 this.controls.reset();
                 break;
             case 'KeyD':
-                // デバッグ表示切り替え
-                window.DEBUG = !window.DEBUG;
-                debugLog('デバッグモード:', window.DEBUG);
+                // デバッグモード切り替え
+                this.toggleDebugMode();
                 break;
             case 'KeyR':
                 // ゲームリセット
@@ -251,6 +272,10 @@ class BallAttackGame {
         this.level = 1;
         this.updateUI();
         this.controls.reset();
+        // カメラモードの場合、カメラ位置も更新
+        if (!this.debugMode) {
+            this.updateCameraPosition();
+        }
         debugLog('ゲームがリセットされました');
     }
     
@@ -277,10 +302,51 @@ class BallAttackGame {
         loading.style.color = '#ff6666';
     }
     
+    toggleDebugMode() {
+        this.debugMode = !this.debugMode;
+        debugLog('デバッグモード:', this.debugMode);
+        
+        // モードに応じて表示を切り替え
+        if (this.debugMode) {
+            // デバッグモード: 人工衛星を表示、カメラは固定位置
+            this.satellite.visible = true;
+            this.camera.position.set(0, 0, 3.5);
+            // デバッグモード時のカメラ姿勢をリセット
+            this.camera.quaternion.set(0, 0, 0, 1);
+        } else {
+            // カメラモード: 人工衛星を非表示、カメラは人工衛星位置
+            this.satellite.visible = false;
+            // 初期カメラ位置も人工衛星と同じに設定
+            this.updateCameraPosition();
+        }
+        
+        this.updateModeUI();
+    }
+    
+    updateCameraPosition() {
+        if (!this.debugMode && this.cameraMount) {
+            // カメラをカメラマウントの位置・姿勢に設定
+            this.cameraMount.getWorldPosition(this.camera.position);
+            this.cameraMount.getWorldQuaternion(this.camera.quaternion);
+        }
+    }
+    
+    updateModeUI() {
+        const modeIndicator = document.getElementById('modeIndicator');
+        if (modeIndicator) {
+            modeIndicator.textContent = this.debugMode ? 'デバッグモード' : 'カメラモード';
+        }
+    }
+    
     update(deltaTime) {
         // 人工衛星の軌道制御の更新
         if (this.controls) {
             this.controls.update();
+        }
+        
+        // カメラモードの場合、カメラ位置を更新
+        if (!this.debugMode) {
+            this.updateCameraPosition();
         }
         
         // パフォーマンス監視

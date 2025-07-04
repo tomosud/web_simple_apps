@@ -102,7 +102,7 @@ class GlobeDragCameraControls {
         position.applyQuaternion(this.camera.quaternion);
         
         this.camera.position.copy(position);
-        this.camera.lookAt(0, 0, 0);
+        // lookAtは使わない（クォータニオンで姿勢制御）
     }
 
     reset() {
