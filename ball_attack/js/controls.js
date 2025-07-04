@@ -159,15 +159,19 @@ class GlobeDragCameraControls {
     }
 }
 
-// 人工衛星の軌道制御クラス
+// 軌道球の回転制御クラス
 class SatelliteOrbitControls {
-    constructor(satellite, domElement, {
+    constructor(orbitSphere, domElement, {
         orbitRadius = 1.3,
-        dragScale = 0.005
+        dragScale = 0.005,
+        camera = null,
+        gameInstance = null
     } = {}) {
         
-        this.satellite = satellite;
+        this.orbitSphere = orbitSphere;
         this.domElement = domElement;
+        this.camera = camera;
+        this.gameInstance = gameInstance;
         this.orbitRadius = orbitRadius;
         this.dragScale = dragScale;
         
@@ -314,8 +318,8 @@ class SatelliteOrbitControls {
     _handleWheel(e) {
         e.preventDefault();
         
-        // ホイールの回転量に応じて半径を変更
-        const force = e.deltaY * 0.0001;  // 感度調整
+        // ホイールの回転量に応じて半径を変更（速度を3倍に）
+        const force = e.deltaY * 0.0003;  // 感度を3倍に変更（0.0001 → 0.0003）
         this.radiusVelocity += force / this.radiusMass;
     }
     
@@ -344,23 +348,50 @@ class SatelliteOrbitControls {
         
         // 速度がある場合のみ回転を適用
         if (Math.abs(this.velocity.x) > threshold || Math.abs(this.velocity.y) > threshold) {
-            // 軌道回転をクォータニオンで実装
-            // 水平ドラッグ → Y軸回転
-            const rotationY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.velocity.x);
-            // 垂直ドラッグ → X軸回転
-            const rotationX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), this.velocity.y);
+            // モード別入力切り替えでシンプル解決
+            const isDebugMode = this.gameInstance ? this.gameInstance.debugMode : true;
             
-            // 軌道回転を適用
-            this.orbitRotation.multiplyQuaternions(rotationY, this.orbitRotation);
-            this.orbitRotation.multiplyQuaternions(rotationX, this.orbitRotation);
+            let adjustedVelocityX = this.velocity.x;
+            let adjustedVelocityY = this.velocity.y;
             
-            // 人工衛星の位置を更新
-            this.updateSatellitePosition();
+            if (isDebugMode) {
+                // 人工衛星モード：上下のみ反転
+                adjustedVelocityY = -this.velocity.y;
+            } else {
+                // カメラモード：左右のみ反転
+                adjustedVelocityX = -this.velocity.x;
+            }
+            
+            // スクリーンスペース固定の直感的操作：カメラ座標系ベース
+            if (this.camera) {
+                // カメラの左右軸（スクリーンX軸）
+                const cameraRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+                // カメラの上下軸（スクリーンY軸）
+                const cameraUp = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion);
+                
+                // 水平ドラッグ（左右）→ カメラの上下軸回転
+                const rotationHorizontal = new THREE.Quaternion().setFromAxisAngle(cameraUp, -adjustedVelocityX);
+                // 垂直ドラッグ（上下）→ カメラの左右軸回転
+                const rotationVertical = new THREE.Quaternion().setFromAxisAngle(cameraRight, -adjustedVelocityY);
+                
+                // 軌道回転を適用（カメラ座標系ベース）
+                this.orbitRotation.multiplyQuaternions(rotationHorizontal, this.orbitRotation);
+                this.orbitRotation.multiplyQuaternions(rotationVertical, this.orbitRotation);
+            } else {
+                // フォールバック：ワールド座標系ベース
+                const rotationY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -adjustedVelocityX);
+                const rotationX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -adjustedVelocityY);
+                this.orbitRotation.multiplyQuaternions(rotationY, this.orbitRotation);
+                this.orbitRotation.multiplyQuaternions(rotationX, this.orbitRotation);
+            }
+            
+            // 軌道球の回転を直接適用
+            this.orbitSphere.quaternion.copy(this.orbitRotation);
         }
         
-        // 半径が変わった場合も位置を更新
+        // 半径が変わった場合、人工衛星の位置を更新
         if (Math.abs(this.radiusVelocity) > 0.001) {
-            this.updateSatellitePosition();
+            this.updateOrbitRadius();
         }
         
         // 微小な速度は停止
@@ -368,32 +399,24 @@ class SatelliteOrbitControls {
         if (Math.abs(this.velocity.y) < threshold) this.velocity.y = 0;
     }
     
-    updateSatellitePosition() {
-        // 初期位置（Z軸上）
-        const position = new THREE.Vector3(0, 0, this.orbitRadius);
+    updateOrbitRadius() {
+        // 軌道球内の人工衛星の位置を更新（Z軸上の距離を変更）
+        const satellite = this.orbitSphere.children.find(child => child.geometry && child.geometry.type === 'ConeGeometry');
+        if (satellite) {
+            satellite.position.setZ(this.orbitRadius);
+        }
         
-        // 軌道回転を適用
-        position.applyQuaternion(this.orbitRotation);
-        
-        // 人工衛星の位置を更新
-        this.satellite.position.copy(position);
-        
-        // 人工衛星が地球の中心を向く（クォータニオンベース）
-        // 初期向き（円錐の先端がZ軸負方向）
-        const initialDirection = new THREE.Vector3(0, 0, -1);
-        // 現在位置から原点への方向
-        const targetDirection = new THREE.Vector3().subVectors(new THREE.Vector3(0, 0, 0), position).normalize();
-        
-        // 初期向きから目標向きへの回転クォータニオンを計算
-        const rotationQuaternion = new THREE.Quaternion().setFromUnitVectors(initialDirection, targetDirection);
-        
-        // 人工衛星の姿勢を更新
-        this.satellite.quaternion.copy(rotationQuaternion);
+        // カメラマウントの位置も更新（人工衛星より少し地球側）
+        const cameraMount = this.orbitSphere.children.find(child => !child.geometry);
+        if (cameraMount) {
+            cameraMount.position.setZ(this.orbitRadius - 0.2);
+        }
     }
     
     reset() {
         // 軌道回転をリセット
         this.orbitRotation.set(0, 0, 0, 1);
+        this.orbitSphere.quaternion.copy(this.orbitRotation);
         
         // 速度もリセット
         this.velocity.x = 0;
@@ -404,7 +427,7 @@ class SatelliteOrbitControls {
         this.radiusVelocity = 0;
         
         // 位置を更新
-        this.updateSatellitePosition();
+        this.updateOrbitRadius();
     }
     
     dispose() {

@@ -36,6 +36,9 @@ class BallAttackGame {
         this.satelliteOrbitRadius = 1.3;
         this.satellitePosition = new THREE.Vector3(0, 0, this.satelliteOrbitRadius);
         
+        // 軌道球（見えない制御用オブジェクト）
+        this.orbitSphere = null;
+        
         this.init();
     }
     
@@ -140,6 +143,11 @@ class BallAttackGame {
     }
     
     setupSatellite() {
+        // 軌道球（見えない制御用オブジェクト）を作成
+        this.orbitSphere = new THREE.Object3D();
+        this.orbitSphere.position.set(0, 0, 0); // 地球の中心に配置
+        this.scene.add(this.orbitSphere);
+        
         // 人工衛星のジオメトリ（円錐）
         const satelliteGeometry = new THREE.ConeGeometry(0.05, 0.15, 8);
         
@@ -152,12 +160,15 @@ class BallAttackGame {
         this.satellite = new THREE.Mesh(satelliteGeometry, satelliteMaterial);
         this.satellite.castShadow = true;
         
-        // 初期位置に配置
-        this.satellite.position.copy(this.satellitePosition);
+        // 人工衛星を軌道半径の位置に配置（Z軸上）
+        this.satellite.position.set(0, 0, this.satelliteOrbitRadius);
         
-        // 姿勢は軌道制御システムで管理（lookAtは使わない）
+        // 人工衛星の初期姿勢（円錐の先端が地球を向く）
+        // 円錐の初期向きはY軸正方向なので、Z軸負方向（地球側）を向くように回転
+        this.satellite.rotation.x = Math.PI / 2; // 90度回転で先端が地球を向く
         
-        this.scene.add(this.satellite);
+        // 人工衛星を軌道球の子として追加
+        this.orbitSphere.add(this.satellite);
         
         // カメラの親子付けセットアップ
         this.setupCameraAttachment();
@@ -169,21 +180,22 @@ class BallAttackGame {
         // カメラ用のオブジェクトを作成（人工衛星の地球側に配置）
         this.cameraMount = new THREE.Object3D();
         
-        // 人工衛星の地球側にカメラマウントを配置
-        // 人工衛星の円錐は地球を向いているので、その後ろ側（地球側）にカメラを配置
-        this.cameraMount.position.set(0, 0, -0.2);  // 人工衛星の地球側に配置
+        // カメラマウントを軌道位置に配置（人工衛星より少し地球側）
+        this.cameraMount.position.set(0, 0, this.satelliteOrbitRadius - 0.2);
         
-        // カメラマウントを人工衛星の子にする
-        this.satellite.add(this.cameraMount);
+        // カメラマウントを軌道球の子にする（人工衛星と同じ親）
+        this.orbitSphere.add(this.cameraMount);
         
         debugLog('カメラマウントが作成されました');
     }
     
     setupControls() {
-        // 人工衛星の軌道制御（クォータニオンベース）
-        this.controls = new SatelliteOrbitControls(this.satellite, this.renderer.domElement, {
+        // 軌道球の回転制御（カメラ座標系ベース、モード別入力切り替え）
+        this.controls = new SatelliteOrbitControls(this.orbitSphere, this.renderer.domElement, {
             orbitRadius: this.satelliteOrbitRadius,
-            dragScale: 0.005
+            dragScale: 0.005,
+            camera: this.camera,
+            gameInstance: this
         });
         debugLog('SatelliteOrbitControlsが初期化されました');
     }
