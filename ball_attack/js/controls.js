@@ -179,10 +179,19 @@ class SatelliteOrbitControls {
         // 速度依存摩擦システム
         this.frictionStrength = 0.08;  // 追加摩擦の強さ（弱く）
         
+        // ズーム（軌道半径）システム
+        this.targetRadius = this.orbitRadius;  // 目標半径
+        this.radiusVelocity = 0;               // 半径変化の速度
+        this.radiusFriction = 0.9;             // 半径変化の摩擦
+        this.radiusMass = 20.0;                // 半径変化の質量（慣性）
+        this.minRadius = 1.1;                  // 最小半径
+        this.maxRadius = 3.0;                  // 最大半径
+        
         // 内部状態
         this._isDown = false;
         this._lastX = 0;
         this._lastY = 0;
+        this._hasMoved = false;  // ドラッグ判定用
         
         // 軌道の回転状態（クォータニオン）
         this.orbitRotation = new THREE.Quaternion();
@@ -195,31 +204,77 @@ class SatelliteOrbitControls {
         this._onDown = e => this._pointerDown(e);
         this._onMove = e => this._pointerMove(e);
         this._onUp = () => this._pointerUp();
+        this._onClick = e => this._handleClick(e);
+        this._onWheel = e => this._handleWheel(e);
         
         this.domElement.addEventListener('mousedown', this._onDown);
         window.addEventListener('mousemove', this._onMove);
         window.addEventListener('mouseup', this._onUp);
+        this.domElement.addEventListener('click', this._onClick);
+        this.domElement.addEventListener('wheel', this._onWheel, {passive: false});
         
-        // タッチ対応
+        // タッチ対応（ピンチジェスチャ含む）
         this.domElement.addEventListener('touchstart', this._onDown, {passive: false});
         window.addEventListener('touchmove', this._onMove, {passive: false});
         window.addEventListener('touchend', this._onUp);
+        
+        // ピンチジェスチャ用
+        this._lastTouchDistance = 0;
     }
     
     _pointerDown(e) {
+        // ピンチジェスチャの場合
+        if (e.touches && e.touches.length === 2) {
+            this._isDown = false;  // 通常のドラッグを無効化
+            const touch1 = e.touches[0];
+            const touch2 = e.touches[1];
+            this._lastTouchDistance = Math.sqrt(
+                Math.pow(touch2.clientX - touch1.clientX, 2) +
+                Math.pow(touch2.clientY - touch1.clientY, 2)
+            );
+            return;
+        }
+        
         const {clientX, clientY} = (e.touches?.[0]) ?? e;
         this._isDown = true;
         this._lastX = clientX;
         this._lastY = clientY;
+        this._hasMoved = false;  // ドラッグ開始時はリセット
     }
     
     _pointerMove(e) {
-        if (!this._isDown) return;
         e.preventDefault();
+        
+        // ピンチジェスチャの処理
+        if (e.touches && e.touches.length === 2) {
+            const touch1 = e.touches[0];
+            const touch2 = e.touches[1];
+            const currentDistance = Math.sqrt(
+                Math.pow(touch2.clientX - touch1.clientX, 2) +
+                Math.pow(touch2.clientY - touch1.clientY, 2)
+            );
+            
+            if (this._lastTouchDistance > 0) {
+                const distanceChange = currentDistance - this._lastTouchDistance;
+                // ピンチイン/アウトで半径変更
+                const force = -distanceChange * 0.001;  // 感度調整
+                this.radiusVelocity += force / this.radiusMass;
+            }
+            
+            this._lastTouchDistance = currentDistance;
+            return;
+        }
+        
+        if (!this._isDown) return;
         
         const {clientX, clientY} = (e.touches?.[0]) ?? e;
         const dX = clientX - this._lastX;
         const dY = clientY - this._lastY;
+        
+        // ドラッグ判定（少しでも動いたらドラッグとみなす）
+        if (Math.abs(dX) > 2 || Math.abs(dY) > 2) {
+            this._hasMoved = true;
+        }
         
         // 現在の速度を計算
         const currentSpeed = Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y);
@@ -243,7 +298,36 @@ class SatelliteOrbitControls {
         this._isDown = false;
     }
     
+    _handleClick(e) {
+        // ドラッグではなくクリックの場合のみ実行
+        if (!this._hasMoved) {
+            // 速度を徐々に減衰させて停止
+            this.velocity.x *= 0.7;
+            this.velocity.y *= 0.7;
+            
+            // 微小な速度は即座に停止
+            if (Math.abs(this.velocity.x) < 0.01) this.velocity.x = 0;
+            if (Math.abs(this.velocity.y) < 0.01) this.velocity.y = 0;
+        }
+    }
+    
+    _handleWheel(e) {
+        e.preventDefault();
+        
+        // ホイールの回転量に応じて半径を変更
+        const force = e.deltaY * 0.0001;  // 感度調整
+        this.radiusVelocity += force / this.radiusMass;
+    }
+    
     update() {
+        // 軌道半径の慣性システム
+        this.radiusVelocity *= this.radiusFriction;
+        this.orbitRadius += this.radiusVelocity;
+        this.orbitRadius = THREE.MathUtils.clamp(this.orbitRadius, this.minRadius, this.maxRadius);
+        
+        // 微小な半径変化速度は停止
+        if (Math.abs(this.radiusVelocity) < 0.001) this.radiusVelocity = 0;
+        
         // 現在の速度を計算
         const currentSpeed = Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y);
         
@@ -271,6 +355,11 @@ class SatelliteOrbitControls {
             this.orbitRotation.multiplyQuaternions(rotationX, this.orbitRotation);
             
             // 人工衛星の位置を更新
+            this.updateSatellitePosition();
+        }
+        
+        // 半径が変わった場合も位置を更新
+        if (Math.abs(this.radiusVelocity) > 0.001) {
             this.updateSatellitePosition();
         }
         
@@ -310,6 +399,10 @@ class SatelliteOrbitControls {
         this.velocity.x = 0;
         this.velocity.y = 0;
         
+        // 半径もリセット
+        this.orbitRadius = 1.3;
+        this.radiusVelocity = 0;
+        
         // 位置を更新
         this.updateSatellitePosition();
     }
@@ -318,6 +411,8 @@ class SatelliteOrbitControls {
         this.domElement.removeEventListener('mousedown', this._onDown);
         window.removeEventListener('mousemove', this._onMove);
         window.removeEventListener('mouseup', this._onUp);
+        this.domElement.removeEventListener('click', this._onClick);
+        this.domElement.removeEventListener('wheel', this._onWheel);
         
         this.domElement.removeEventListener('touchstart', this._onDown);
         window.removeEventListener('touchmove', this._onMove);
