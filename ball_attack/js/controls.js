@@ -171,10 +171,10 @@ class SatelliteOrbitControls {
         this.orbitRadius = orbitRadius;
         this.dragScale = dragScale;
         
-        // 慣性システム
+        // 慣性システム（重い物理挙動）
         this.velocity = { x: 0, y: 0 };
-        this.friction = 0.95;
-        this.mass = 3.0;
+        this.friction = 0.98;  // 摩擦を低く（長く滑る）
+        this.mass = 100.0;     // 質量を適度に重く
         
         // 内部状態
         this._isDown = false;
@@ -235,12 +235,15 @@ class SatelliteOrbitControls {
     }
     
     update() {
-        // 慣性による減速
+        // 慣性による減速（重い物理挙動）
         this.velocity.x *= this.friction;
         this.velocity.y *= this.friction;
         
+        // より小さな閾値で動き続ける（重いものは微小な動きも継続）
+        const threshold = 0.0001;
+        
         // 速度がある場合のみ回転を適用
-        if (Math.abs(this.velocity.x) > 0.001 || Math.abs(this.velocity.y) > 0.001) {
+        if (Math.abs(this.velocity.x) > threshold || Math.abs(this.velocity.y) > threshold) {
             // 軌道回転をクォータニオンで実装
             // 水平ドラッグ → Y軸回転
             const rotationY = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.velocity.x);
@@ -255,9 +258,9 @@ class SatelliteOrbitControls {
             this.updateSatellitePosition();
         }
         
-        // 微小な速度は停止
-        if (Math.abs(this.velocity.x) < 0.001) this.velocity.x = 0;
-        if (Math.abs(this.velocity.y) < 0.001) this.velocity.y = 0;
+        // 微小な速度は停止（より小さな閾値）
+        if (Math.abs(this.velocity.x) < threshold) this.velocity.x = 0;
+        if (Math.abs(this.velocity.y) < threshold) this.velocity.y = 0;
     }
     
     updateSatellitePosition() {
