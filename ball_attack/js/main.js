@@ -127,9 +127,12 @@ class BallAttackGame {
     }
     
     setupControls() {
-        // 地球の回転制御（アークボール方式）
-        this.controls = new ArcballControls(this.earth, this.camera, this.renderer);
-        debugLog('アークボール制御システムが初期化されました');
+        // 地球の回転制御（レール式カメラコントロール）
+        this.controls = new GlobeDragCameraControls(this.camera, this.renderer.domElement, {
+            radius:    this.earthRadius, // 地球半径を既存変数で
+            camOffset: 1.5,              // 地表からの高さ（お好みで）
+        });
+        debugLog('GlobeDragCameraControlsが初期化されました');
     }
     
     setupEventListeners() {
@@ -208,9 +211,9 @@ class BallAttackGame {
     }
     
     update(deltaTime) {
-        // 地球制御の更新（アークボール慣性システム）
+        // 地球制御の更新（慣性物理システム）
         if (this.controls) {
-            this.controls.update();
+            this.controls.update(deltaTime); // 物理システムにdeltaTimeを渡す
         }
         
         // パフォーマンス監視
@@ -228,8 +231,15 @@ class BallAttackGame {
     animate(currentTime = 0) {
         if (!this.isGameRunning) return;
         
-        const deltaTime = currentTime - this.lastTime;
+        // 初回実行時はdeltaTimeを0にする
+        let deltaTime = 0;
+        if (this.lastTime !== 0) {
+            deltaTime = (currentTime - this.lastTime) / 1000; // ミリ秒→秒に変換
+        }
         this.lastTime = currentTime;
+        
+        // deltaTimeが異常に大きい場合は制限（1/60秒でキャップ）
+        deltaTime = Math.min(deltaTime, 1/60);
         
         this.update(deltaTime);
         this.render();
