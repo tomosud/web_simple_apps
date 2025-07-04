@@ -172,6 +172,42 @@ class BallAttackGame {
         
         // キーボードイベント
         document.addEventListener('keydown', this.onKeyDown.bind(this));
+        
+        // 物理パラメータのUI制御
+        this.setupPhysicsControls();
+    }
+    
+    setupPhysicsControls() {
+        const frictionStrengthSlider = document.getElementById('frictionStrength');
+        const frictionValue = document.getElementById('frictionValue');
+        const massSlider = document.getElementById('mass');
+        const massValue = document.getElementById('massValue');
+        const baseFrictionSlider = document.getElementById('baseFriction');
+        const baseFrictionValue = document.getElementById('baseFrictionValue');
+        
+        if (frictionStrengthSlider) {
+            frictionStrengthSlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                this.controls.frictionStrength = value;
+                frictionValue.textContent = value.toFixed(2);
+            });
+        }
+        
+        if (massSlider) {
+            massSlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                this.controls.mass = value;
+                massValue.textContent = value;
+            });
+        }
+        
+        if (baseFrictionSlider) {
+            baseFrictionSlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                this.controls.baseFriction = value;
+                baseFrictionValue.textContent = value.toFixed(2);
+            });
+        }
     }
     
     setupPerformanceMonitor() {

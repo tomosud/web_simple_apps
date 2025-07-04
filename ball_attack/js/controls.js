@@ -173,8 +173,11 @@ class SatelliteOrbitControls {
         
         // 慣性システム（重い物理挙動）
         this.velocity = { x: 0, y: 0 };
-        this.friction = 0.98;  // 摩擦を低く（長く滑る）
-        this.mass = 100.0;     // 質量を適度に重く
+        this.baseFriction = 0.98;      // 基本摩擦
+        this.mass = 100.0;             // 質量を適度に重く
+        
+        // 速度依存摩擦システム
+        this.frictionStrength = 0.08;  // 追加摩擦の強さ（弱く）
         
         // 内部状態
         this._isDown = false;
@@ -218,11 +221,17 @@ class SatelliteOrbitControls {
         const dX = clientX - this._lastX;
         const dY = clientY - this._lastY;
         
-        // ドラッグ力を速度に変換
-        const forceX = -dX * this.dragScale;
-        const forceY = dY * this.dragScale;
+        // 現在の速度を計算
+        const currentSpeed = Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y);
         
-        // 速度に加算
+        // 速度に応じて乗算値を調整（動いてるときは加算的、止まってるときは弱く）
+        const speedFactor = currentSpeed > 0.001 ? 0.2 : 0.1;  // 動いてる時は0.2、止まってる時は0.1（半分）
+        
+        // ドラッグ力を計算
+        const forceX = (-dX * this.dragScale * speedFactor);
+        const forceY = (dY * this.dragScale * speedFactor);
+        
+        // 力を速度に適用
         this.velocity.x += forceX / this.mass;
         this.velocity.y += forceY / this.mass;
         
@@ -235,11 +244,18 @@ class SatelliteOrbitControls {
     }
     
     update() {
-        // 慣性による減速（重い物理挙動）
-        this.velocity.x *= this.friction;
-        this.velocity.y *= this.friction;
+        // 現在の速度を計算
+        const currentSpeed = Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y);
         
-        // より小さな閾値で動き続ける（重いものは微小な動きも継続）
+        // 低速域での摩擦（一定速度以下で徐々に止まる）
+        const lowSpeedThreshold = 0.005;  // この速度以下で摩擦が働く
+        if (currentSpeed < lowSpeedThreshold && currentSpeed > 0) {
+            const friction = 0.95;  // 低速時の摩擦
+            this.velocity.x *= friction;
+            this.velocity.y *= friction;
+        }
+        
+        // より小さな閾値で動き続ける
         const threshold = 0.0001;
         
         // 速度がある場合のみ回転を適用
@@ -258,7 +274,7 @@ class SatelliteOrbitControls {
             this.updateSatellitePosition();
         }
         
-        // 微小な速度は停止（より小さな閾値）
+        // 微小な速度は停止
         if (Math.abs(this.velocity.x) < threshold) this.velocity.x = 0;
         if (Math.abs(this.velocity.y) < threshold) this.velocity.y = 0;
     }

@@ -18,9 +18,14 @@
             </div>
             
             <div class="instructions">
-                <div>地球をドラッグして回転</div>
-                <div>弾は自動発射</div>
-                <div>敵を撃墜してスコアを獲得</div>
+                <div>人工衛星をドラッグして軌道移動</div>
+                <div>Fキー: リセット</div>
+            </div>
+            
+            <div class="physics-controls" style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; color: white; font-size: 12px;">
+                <div>摩擦強度: <input type="range" id="frictionStrength" min="0.01" max="0.3" step="0.01" value="0.08" style="width: 100px;"> <span id="frictionValue">0.08</span></div>
+                <div>質量: <input type="range" id="mass" min="10" max="200" step="10" value="100" style="width: 100px;"> <span id="massValue">100</span></div>
+                <div>基本摩擦: <input type="range" id="baseFriction" min="0.90" max="0.99" step="0.01" value="0.98" style="width: 100px;"> <span id="baseFrictionValue">0.98</span></div>
             </div>
         </div>
 
