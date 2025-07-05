@@ -183,7 +183,7 @@ class WeaponSystem {
         
         // 銃の位置設定
         this.gunOffset = 0.1; // 人工衛星から銃までの距離
-        this.gunSpread = 0.15; // 左右の銃の間隔（3倍に拡大）
+        this.gunSpread = 0.075; // 左右の銃の間隔（半分に縮小）
         this.convergenceDistance = 0.8; // 収束距離（地球表面近く）
         
         // 爆発エフェクト（パーティクルシステムに置き換え）

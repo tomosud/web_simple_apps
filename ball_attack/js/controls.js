@@ -336,7 +336,7 @@ class SatelliteOrbitControls {
         const currentSpeed = Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y);
         
         // 低速域での摩擦（一定速度以下で徐々に止まる）
-        const lowSpeedThreshold = 0.005;  // この速度以下で摩擦が働く
+        const lowSpeedThreshold = 0.0025;  // この速度以下で摩擦が働く（半分に変更）
         if (currentSpeed < lowSpeedThreshold && currentSpeed > 0) {
             const friction = 0.95;  // 低速時の摩擦
             this.velocity.x *= friction;
