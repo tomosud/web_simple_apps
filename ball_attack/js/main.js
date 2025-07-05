@@ -42,6 +42,9 @@ class BallAttackGame {
         // 武器システム
         this.weaponSystem = null;
         
+        // サウンドシステム
+        this.soundSystem = null;
+        
         this.init();
     }
     
@@ -50,6 +53,7 @@ class BallAttackGame {
             this.setupScene();
             this.setupEarth();
             this.setupSatellite();
+            this.setupSound();
             this.setupControls();
             this.setupWeapons();
             this.setupEventListeners();
@@ -197,14 +201,21 @@ class BallAttackGame {
             orbitRadius: this.satelliteOrbitRadius,
             dragScale: 0.005,
             camera: this.camera,
-            gameInstance: this
+            gameInstance: this,
+            soundSystem: this.soundSystem
         });
         debugLog('SatelliteOrbitControlsが初期化されました');
     }
     
+    setupSound() {
+        // サウンドシステムの初期化
+        this.soundSystem = new SoundSystem();
+        debugLog('サウンドシステムが初期化されました');
+    }
+    
     setupWeapons() {
         // 武器システムの初期化
-        this.weaponSystem = new WeaponSystem(this.scene, this.camera, this.earth, this.satellite);
+        this.weaponSystem = new WeaponSystem(this.scene, this.camera, this.earth, this.satellite, this.soundSystem);
         debugLog('武器システムが初期化されました');
     }
     

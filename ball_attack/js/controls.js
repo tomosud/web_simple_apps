@@ -165,13 +165,15 @@ class SatelliteOrbitControls {
         orbitRadius = 1.3,
         dragScale = 0.005,
         camera = null,
-        gameInstance = null
+        gameInstance = null,
+        soundSystem = null
     } = {}) {
         
         this.orbitSphere = orbitSphere;
         this.domElement = domElement;
         this.camera = camera;
         this.gameInstance = gameInstance;
+        this.soundSystem = soundSystem;
         this.orbitRadius = orbitRadius;
         this.dragScale = dragScale;
         

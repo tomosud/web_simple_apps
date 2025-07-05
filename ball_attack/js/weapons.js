@@ -148,11 +148,12 @@ class ParticleSystem {
 }
 
 class WeaponSystem {
-    constructor(scene, camera, earth, satellite) {
+    constructor(scene, camera, earth, satellite, soundSystem = null) {
         this.scene = scene;
         this.camera = camera;
         this.earth = earth;
         this.satellite = satellite;
+        this.soundSystem = soundSystem;
         
         // 弾丸管理
         this.bullets = [];
@@ -333,6 +334,11 @@ class WeaponSystem {
         // 左右交互切り替え
         this.isLeftGun = !this.isLeftGun;
         
+        // 発射音を再生
+        if (this.soundSystem) {
+            this.soundSystem.playCannonSound();
+        }
+        
         return true;
     }
     
@@ -394,6 +400,11 @@ class WeaponSystem {
         // 攻撃判定球を表示（すべての着弾位置に）
         if (this.showWireframes) {
             this.addWireframeSphere(lightPosition, this.attackRange);
+        }
+        
+        // 爆発音を再生
+        if (this.soundSystem) {
+            this.soundSystem.playImpactSound();
         }
     }
     
