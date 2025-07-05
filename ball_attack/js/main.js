@@ -45,6 +45,9 @@ class BallAttackGame {
         // サウンドシステム
         this.soundSystem = null;
         
+        // 敵システム
+        this.enemySystem = null;
+        
         this.init();
     }
     
@@ -56,6 +59,7 @@ class BallAttackGame {
             this.setupSound();
             this.setupControls();
             this.setupWeapons();
+            this.setupEnemies();
             this.setupEventListeners();
             this.setupPerformanceMonitor();
             this.hideLoading();
@@ -219,6 +223,15 @@ class BallAttackGame {
         debugLog('武器システムが初期化されました');
     }
     
+    setupEnemies() {
+        // 敵システムの初期化
+        this.enemySystem = new EnemySystem(this.scene, this.earthRadius, this.soundSystem);
+        
+        // 敵を配置
+        this.enemySystem.generateEnemies(300);
+        debugLog('敵システムが初期化されました');
+    }
+    
     setupEventListeners() {
         // ウィンドウリサイズ
         window.addEventListener('resize', this.onWindowResize.bind(this));
@@ -235,6 +248,9 @@ class BallAttackGame {
         
         // 物理パラメータのUI制御
         this.setupPhysicsControls();
+        
+        // 武器パラメータのUI制御
+        this.setupWeaponControls();
     }
     
     setupPhysicsControls() {
@@ -266,6 +282,33 @@ class BallAttackGame {
                 const value = parseFloat(e.target.value);
                 this.controls.baseFriction = value;
                 baseFrictionValue.textContent = value.toFixed(2);
+            });
+        }
+    }
+    
+    setupWeaponControls() {
+        const attackRangeSlider = document.getElementById('attackRange');
+        const attackRangeValue = document.getElementById('attackRangeValue');
+        const spreadFactorSlider = document.getElementById('spreadFactor');
+        const spreadFactorValue = document.getElementById('spreadFactorValue');
+        
+        if (attackRangeSlider) {
+            attackRangeSlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                if (this.weaponSystem) {
+                    this.weaponSystem.setAttackRange(value);
+                }
+                attackRangeValue.textContent = value.toFixed(3);
+            });
+        }
+        
+        if (spreadFactorSlider) {
+            spreadFactorSlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                if (this.weaponSystem) {
+                    this.weaponSystem.spreadFactor = value;
+                }
+                spreadFactorValue.textContent = value.toFixed(3);
             });
         }
     }
@@ -333,6 +376,13 @@ class BallAttackGame {
         this.level = 1;
         this.updateUI();
         this.controls.reset();
+        
+        // 敵システムをリセット
+        if (this.enemySystem) {
+            this.enemySystem.reset();
+            this.enemySystem.generateEnemies(300);
+        }
+        
         // カメラモードの場合、カメラ位置も更新
         if (!this.debugMode) {
             this.updateCameraPosition();
@@ -341,8 +391,11 @@ class BallAttackGame {
     }
     
     updateUI() {
+        // 敵システムからリアルタイムで情報を取得
+        const enemyCount = this.enemySystem ? this.enemySystem.getActiveEnemyCount() : 0;
+        
         document.getElementById('score').textContent = this.score;
-        document.getElementById('enemyCount').textContent = this.enemyCount;
+        document.getElementById('enemyCount').textContent = enemyCount;
         document.getElementById('level').textContent = this.level;
     }
     
@@ -399,6 +452,42 @@ class BallAttackGame {
         }
     }
     
+    checkCollisions() {
+        if (!this.weaponSystem || !this.enemySystem) {
+            return;
+        }
+        
+        // 武器システムから攻撃判定球を取得
+        const attackSpheres = this.weaponSystem.getAttackSpheres();
+        if (attackSpheres.length === 0) {
+            return;
+        }
+        
+        // 敵システムで衝突判定
+        const hits = this.enemySystem.checkCollisions(attackSpheres);
+        
+        // 衝突があった場合の処理
+        for (let hit of hits) {
+            if (this.enemySystem.destroyEnemy(hit.enemy, hit.damage)) {
+                // 撃破成功時のスコア加算
+                this.score += 100;
+                
+                // 全敵撃破チェック
+                if (this.enemySystem.isAllEnemiesDestroyed()) {
+                    this.onGameClear();
+                }
+            }
+        }
+        
+        // UIを更新
+        this.updateUI();
+    }
+    
+    onGameClear() {
+        debugLog('ゲームクリア！');
+        // クリア時の処理（将来実装）
+    }
+    
     update(deltaTime) {
         // 人工衛星の軌道制御の更新
         if (this.controls) {
@@ -414,6 +503,14 @@ class BallAttackGame {
         if (this.weaponSystem) {
             this.weaponSystem.update(deltaTime);
         }
+        
+        // 敵システムの更新
+        if (this.enemySystem) {
+            this.enemySystem.update(deltaTime);
+        }
+        
+        // 衝突判定とスコア更新
+        this.checkCollisions();
         
         // パフォーマンス監視
         if (this.performanceMonitor) {
@@ -456,6 +553,10 @@ class BallAttackGame {
         
         if (this.weaponSystem) {
             this.weaponSystem.dispose();
+        }
+        
+        if (this.enemySystem) {
+            this.enemySystem.dispose();
         }
         
         if (this.renderer) {

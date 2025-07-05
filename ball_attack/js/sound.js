@@ -14,7 +14,8 @@ class SoundSystem {
         this.volumes = {
             cannon: 0.3,    // 発射音
             impact: 0.4,    // 爆発音
-            swipe: 0.2      // UI音
+            swipe: 0.2,     // UI音
+            enemyDestroy: 0.3  // 敵撃破音
         };
         
         this.loadSounds();
@@ -23,23 +24,67 @@ class SoundSystem {
     /**
      * サウンドファイルの読み込み
      */
-    loadSounds() {
-        const soundFiles = {
-            cannon01: 'assets/sound/Canon01.wav',
-            cannon02: 'assets/sound/Canon02.wav',
-            impact: 'assets/sound/impact01.wav',
-            swipe: 'assets/sound/Swipe.wav'
+    async loadSounds() {
+        // 基本サウンドファイル
+        const baseSoundFiles = {
+            cannon: 'Canon',
+            impact: 'impact',
+            hit: 'hit',
+            swipe: 'Swipe.wav'
         };
         
-        // 各サウンドファイルを読み込み
-        for (const [key, path] of Object.entries(soundFiles)) {
-            this.sounds[key] = new Audio(path);
-            this.sounds[key].preload = 'auto';
+        // 連番サウンドの自動検出とロード
+        for (const [category, baseName] of Object.entries(baseSoundFiles)) {
+            if (category === 'swipe') {
+                // swipeは単体ファイル
+                this.sounds['swipe'] = new Audio(`assets/sound/${baseName}`);
+                this.sounds['swipe'].preload = 'auto';
+                continue;
+            }
             
-            // エラーハンドリング
-            this.sounds[key].onerror = () => {
-                console.warn(`サウンドファイルの読み込みに失敗: ${path}`);
-            };
+            // 連番ファイルを検出してロード
+            await this.loadSerialSounds(category, baseName);
+        }
+    }
+    
+    /**
+     * 連番サウンドファイルの自動検出・ロード
+     */
+    async loadSerialSounds(category, baseName) {
+        const soundArray = [];
+        let index = 1;
+        
+        while (index <= 10) { // 最大10個まで検索
+            const paddedIndex = index.toString().padStart(2, '0');
+            const fileName = `${baseName}${paddedIndex}.wav`;
+            const path = `assets/sound/${fileName}`;
+            
+            try {
+                const audio = new Audio(path);
+                audio.preload = 'auto';
+                
+                // ファイルが存在するかチェック
+                await new Promise((resolve, reject) => {
+                    audio.addEventListener('canplaythrough', resolve, { once: true });
+                    audio.addEventListener('error', reject, { once: true });
+                    
+                    // タイムアウト設定
+                    setTimeout(() => reject(new Error('Timeout')), 1000);
+                });
+                
+                soundArray.push(audio);
+                debugLog(`サウンド読み込み成功: ${fileName}`);
+                index++;
+            } catch (error) {
+                // ファイルが見つからない場合は終了
+                break;
+            }
+        }
+        
+        // 配列に格納
+        if (soundArray.length > 0) {
+            this.sounds[category] = soundArray;
+            debugLog(`${category}サウンド: ${soundArray.length}個読み込み`);
         }
     }
     
@@ -47,16 +92,14 @@ class SoundSystem {
      * 発射音を再生（ランダム選択）
      */
     playCannonSound() {
-        const cannonSounds = ['cannon01', 'cannon02'];
-        const randomSound = cannonSounds[Math.floor(Math.random() * cannonSounds.length)];
-        this.playSound(randomSound, this.volumes.cannon);
+        this.playRandomSound('cannon', this.volumes.cannon);
     }
     
     /**
-     * 爆発音を再生
+     * 爆発音を再生（ランダム選択）
      */
     playImpactSound() {
-        this.playSound('impact', this.volumes.impact);
+        this.playRandomSound('impact', this.volumes.impact);
     }
     
     /**
@@ -64,6 +107,34 @@ class SoundSystem {
      */
     playSwipeSound() {
         this.playSound('swipe', this.volumes.swipe);
+    }
+    
+    /**
+     * 敵撃破音を再生（hitサウンドをランダム選択）
+     */
+    playEnemyDestroySound() {
+        this.playRandomSound('hit', this.volumes.enemyDestroy);
+    }
+    
+    /**
+     * 連番サウンドからランダム選択して再生
+     */
+    playRandomSound(category, volume = 1.0) {
+        const sounds = this.sounds[category];
+        if (!sounds) {
+            console.warn(`サウンドカテゴリが見つかりません: ${category}`);
+            return;
+        }
+        
+        if (Array.isArray(sounds)) {
+            // 配列の場合はランダム選択
+            const randomIndex = Math.floor(Math.random() * sounds.length);
+            const selectedSound = sounds[randomIndex];
+            this.playAudioInstance(selectedSound, volume);
+        } else {
+            // 単体の場合はそのまま再生
+            this.playAudioInstance(sounds, volume);
+        }
     }
     
     /**
@@ -78,6 +149,15 @@ class SoundSystem {
             return;
         }
         
+        this.playAudioInstance(sound, volume);
+    }
+    
+    /**
+     * Audioインスタンスを再生
+     * @param {Audio} audioInstance - 再生するAudioインスタンス
+     * @param {number} volume - 音量（0.0-1.0）
+     */
+    playAudioInstance(audioInstance, volume = 1.0) {
         // 同時再生数制限
         if (this.activeSounds.size >= this.maxConcurrentSounds) {
             return;
@@ -85,7 +165,7 @@ class SoundSystem {
         
         try {
             // 新しいAudioインスタンスを作成（重複再生対応）
-            const audioClone = sound.cloneNode();
+            const audioClone = audioInstance.cloneNode();
             audioClone.volume = volume * this.volumeMultiplier;
             
             // 再生終了時の処理
@@ -95,12 +175,12 @@ class SoundSystem {
             
             this.activeSounds.add(audioClone);
             audioClone.play().catch(error => {
-                console.warn(`サウンド再生エラー: ${soundKey}`, error);
+                console.warn(`サウンド再生エラー`, error);
                 this.activeSounds.delete(audioClone);
             });
             
         } catch (error) {
-            console.warn(`サウンド再生エラー: ${soundKey}`, error);
+            console.warn(`サウンド再生エラー`, error);
         }
     }
     

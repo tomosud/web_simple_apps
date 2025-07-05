@@ -169,7 +169,7 @@ class WeaponSystem {
         this.flashLightOverlapDistance = 0.1; // 重複判定距離
         
         // 攻撃判定球仕様
-        this.attackRange = 0.036; // 攻撃範囲半径（0.6倍に縮小、ポイントライトと連動）
+        this.attackRange = 0.095; // 攻撃範囲半径（拡大、ポイントライトと連動）
         this.centerDamage = 1.0; // 中心部致死性100%
         this.borderDamage = 0.2; // 境界部致死性20%
         
@@ -199,6 +199,13 @@ class WeaponSystem {
         this.wireframeSpheres = [];
         this.wireframeSpherePool = [];
         this.showWireframes = false; // デバッグ用フラグ
+        
+        // 攻撃判定球管理
+        this.attackSpheres = [];
+        this.attackSphereLifetime = 0.1; // 攻撃判定の有効時間（短時間）
+        
+        // 散らばりパラメータ
+        this.spreadFactor = 0.05; // 着弾散らばり係数
         
         this.initBulletPool();
         this.initParticleSystem();
@@ -304,11 +311,19 @@ class WeaponSystem {
         
         gunPosition.add(gunOffset);
         
-        // 弾丸の初期設定（振動システム）
+        // 着弾散らばりを追加（ランダムオフセット）
+        const spreadOffset = new THREE.Vector3(
+            (Math.random() - 0.5) * this.spreadFactor,
+            (Math.random() - 0.5) * this.spreadFactor,
+            (Math.random() - 0.5) * this.spreadFactor
+        );
+        
+        // 弾丸の初期設定（振動システム + 散らばり）
         bullet.userData.basePosition.copy(gunPosition);
-        bullet.userData.baseVelocity = directionToEarth.clone().multiplyScalar(this.bulletSpeed);
+        bullet.userData.baseVelocity = directionToEarth.clone().add(spreadOffset).multiplyScalar(this.bulletSpeed);
         bullet.userData.lifetime = 0;
         bullet.userData.active = true;
+        
         
         // 各弾で個別の振動パラメータをよりランダム化（周期を3倍に）
         bullet.userData.vibrationPhaseX = Math.random() * Math.PI * 2;
@@ -402,6 +417,9 @@ class WeaponSystem {
             this.addWireframeSphere(lightPosition, this.attackRange);
         }
         
+        // 攻撃判定球をリストに追加（敵との衝突判定用）
+        this.addAttackSphere(lightPosition, this.attackRange);
+        
         // 爆発音を再生
         if (this.soundSystem) {
             this.soundSystem.playImpactSound();
@@ -475,6 +493,9 @@ class WeaponSystem {
         if (this.showWireframes) {
             this.updateWireframeSpheres(deltaTime);
         }
+        
+        // 攻撃判定球の更新
+        this.updateAttackSpheres(deltaTime);
     }
     
     removeBullet(index) {
@@ -531,7 +552,8 @@ class WeaponSystem {
             showWireframes: this.showWireframes,
             attackRange: this.attackRange,
             centerDamage: this.centerDamage,
-            borderDamage: this.borderDamage
+            borderDamage: this.borderDamage,
+            spreadFactor: this.spreadFactor
         };
     }
     
@@ -670,5 +692,32 @@ class WeaponSystem {
             }
             this.wireframeSpheres = [];
         }
+    }
+    
+    // 攻撃判定球を追加
+    addAttackSphere(position, radius) {
+        const attackSphere = {
+            position: position.clone(),
+            radius: radius,
+            createdTime: performance.now() / 1000,
+            userData: { radius: radius }
+        };
+        
+        this.attackSpheres.push(attackSphere);
+    }
+    
+    // 攻撃判定球の更新
+    updateAttackSpheres(deltaTime) {
+        const currentTime = performance.now() / 1000;
+        
+        // 古い攻撃判定球を削除
+        this.attackSpheres = this.attackSpheres.filter(sphere => {
+            return (currentTime - sphere.createdTime) < this.attackSphereLifetime;
+        });
+    }
+    
+    // 攻撃判定球を取得（敵システム用）
+    getAttackSpheres() {
+        return this.attackSpheres;
     }
 }
