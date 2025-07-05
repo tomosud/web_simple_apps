@@ -39,6 +39,9 @@ class BallAttackGame {
         // 軌道球（見えない制御用オブジェクト）
         this.orbitSphere = null;
         
+        // 武器システム
+        this.weaponSystem = null;
+        
         this.init();
     }
     
@@ -48,6 +51,7 @@ class BallAttackGame {
             this.setupEarth();
             this.setupSatellite();
             this.setupControls();
+            this.setupWeapons();
             this.setupEventListeners();
             this.setupPerformanceMonitor();
             this.hideLoading();
@@ -80,8 +84,7 @@ class BallAttackGame {
         });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(window.devicePixelRatio);
-        this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.shadowMap.enabled = false; // シャドウマップ無効
         
         // キャンバスを追加
         const container = document.getElementById('gameCanvas');
@@ -96,12 +99,10 @@ class BallAttackGame {
         const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
         this.scene.add(ambientLight);
         
-        // 指向性ライト
+        // 指向性ライト（cast shadow無効）
         const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
         directionalLight.position.set(10, 10, 5);
-        directionalLight.castShadow = true;
-        directionalLight.shadow.mapSize.width = 2048;
-        directionalLight.shadow.mapSize.height = 2048;
+        directionalLight.castShadow = false; // シャドウ無効
         this.scene.add(directionalLight);
         
         // ポイントライト（地球の裏側を照らす）
@@ -136,7 +137,7 @@ class BallAttackGame {
         
         // 地球メッシュ作成
         this.earth = new THREE.Mesh(earthGeometry, earthMaterial);
-        this.earth.receiveShadow = true;
+        this.earth.receiveShadow = false; // シャドウ受信無効
         this.scene.add(this.earth);
         
         debugLog('地球オブジェクトが作成されました');
@@ -158,7 +159,7 @@ class BallAttackGame {
         
         // 人工衛星メッシュ作成
         this.satellite = new THREE.Mesh(satelliteGeometry, satelliteMaterial);
-        this.satellite.castShadow = true;
+        this.satellite.castShadow = false; // シャドウ投影無効
         
         // 人工衛星を軌道半径の位置に配置（Z軸上）
         this.satellite.position.set(0, 0, this.satelliteOrbitRadius);
@@ -200,12 +201,25 @@ class BallAttackGame {
         debugLog('SatelliteOrbitControlsが初期化されました');
     }
     
+    setupWeapons() {
+        // 武器システムの初期化
+        this.weaponSystem = new WeaponSystem(this.scene, this.camera, this.earth, this.satellite);
+        debugLog('武器システムが初期化されました');
+    }
+    
     setupEventListeners() {
         // ウィンドウリサイズ
         window.addEventListener('resize', this.onWindowResize.bind(this));
         
         // キーボードイベント
         document.addEventListener('keydown', this.onKeyDown.bind(this));
+        
+        // 発射ボタンのイベント
+        const fireButton = document.getElementById('fireButton');
+        if (fireButton) {
+            fireButton.addEventListener('click', this.onFireButtonClick.bind(this));
+            fireButton.addEventListener('touchstart', this.onFireButtonClick.bind(this), { passive: false });
+        }
         
         // 物理パラメータのUI制御
         this.setupPhysicsControls();
@@ -268,6 +282,29 @@ class BallAttackGame {
                 // ゲームリセット
                 this.resetGame();
                 break;
+            case 'Space':
+                // 発射
+                event.preventDefault();
+                this.fire();
+                break;
+            case 'KeyW':
+                // ワイヤーフレーム表示切り替え
+                if (this.weaponSystem) {
+                    this.weaponSystem.toggleWireframes();
+                }
+                break;
+        }
+    }
+    
+    onFireButtonClick(event) {
+        event.preventDefault();
+        this.fire();
+    }
+    
+    fire() {
+        if (this.weaponSystem && this.isGameRunning) {
+            const currentTime = performance.now() / 1000;
+            this.weaponSystem.fire(currentTime);
         }
     }
     
@@ -361,6 +398,11 @@ class BallAttackGame {
             this.updateCameraPosition();
         }
         
+        // 武器システムの更新
+        if (this.weaponSystem) {
+            this.weaponSystem.update(deltaTime);
+        }
+        
         // パフォーマンス監視
         if (this.performanceMonitor) {
             this.performanceMonitor.update();
@@ -398,6 +440,10 @@ class BallAttackGame {
         
         if (this.controls) {
             this.controls.dispose();
+        }
+        
+        if (this.weaponSystem) {
+            this.weaponSystem.dispose();
         }
         
         if (this.renderer) {
