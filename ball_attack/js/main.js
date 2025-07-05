@@ -240,7 +240,7 @@ class BallAttackGame {
         this.enemySystem = new EnemySystem(this.scene, this.earthRadius, this.soundSystem);
         
         // ステージ1: 子敵0個で開始（親敵が配置）
-        this.enemySystem.generateEnemies(100);
+        this.enemySystem.generateEnemies(0);
         debugLog('敵システムが初期化されました（ステージ1: 子敵0個で開始）');
     }
     
@@ -495,7 +495,7 @@ class BallAttackGame {
         // 敵システムをリセット
         if (this.enemySystem) {
             this.enemySystem.reset();
-            this.enemySystem.generateEnemies(100); // ステージ1: 0個で開始
+            this.enemySystem.generateEnemies(0); // ステージ1: 0個で開始
         }
         
         // 親敵システムをリセット

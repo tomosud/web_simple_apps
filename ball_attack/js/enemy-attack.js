@@ -125,12 +125,13 @@ class EnemyAttackSystem {
             activeEnemies++;
             nonDestroyingEnemies++;
             
-            // スポーン中の敵をカウント
-            if (enemy.userData.isSpawning) {
-                spawningEnemies++;
-            } else {
+            // スポーン中の敵をカウント（削除：初期配置と同じ仕様にする）
+            // if (enemy.userData.isSpawning) {
+            //     spawningEnemies++;
+            //     continue; // スポーン中の敵は攻撃しない
+            // } else {
                 nonSpawningEnemies++;
-            }
+            // }
             
             // 既に攻撃中の敵はスキップ
             if (this.attackingEnemies.has(enemy.userData.id)) {
@@ -148,7 +149,7 @@ class EnemyAttackSystem {
         
         // デバッグ情報（5秒に1回出力）
         if (currentTime - this.lastDebugTime > 5.0) {
-            console.log(`EnemyAttack Debug: Total=${totalEnemies}, Active=${activeEnemies}, Available=${availableEnemies}, InRange=${inRangeEnemies}, Spawning=${spawningEnemies}, NonSpawning=${nonSpawningEnemies}, AttackPhase=${this.isAttackPhase}`);
+            console.log(`EnemyAttack Debug: Total=${totalEnemies}, Active=${activeEnemies}, Available=${availableEnemies}, InRange=${inRangeEnemies}, NonSpawning=${nonSpawningEnemies}, AttackPhase=${this.isAttackPhase}`);
             this.lastDebugTime = currentTime;
         }
         
@@ -205,6 +206,11 @@ class EnemyAttackSystem {
             return false;
         }
         
+        // デバッグ情報出力（10%の確率で）
+        if (Math.random() < 0.1) {
+            console.log(`発射デバッグ: 発射位置=${enemyPosition.x.toFixed(3)}, ${enemyPosition.y.toFixed(3)}, ${enemyPosition.z.toFixed(3)}, 目標位置=${targetPosition.x.toFixed(3)}, ${targetPosition.y.toFixed(3)}, ${targetPosition.z.toFixed(3)}`);
+        }
+        
         // 発射位置設定
         projectile.position.copy(enemyPosition);
         
@@ -229,8 +235,8 @@ class EnemyAttackSystem {
         quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), lookDirection);
         projectile.quaternion.copy(quaternion);
         
-        // 速度設定
-        projectile.userData.velocity.copy(direction.multiplyScalar(this.projectileSpeed));
+        // 速度設定（方向ベクトルは既に正規化済みなので、速度を直接掛ける）
+        projectile.userData.velocity.copy(direction.clone().multiplyScalar(this.projectileSpeed));
         
         // 弾丸状態設定
         projectile.userData.active = true;
@@ -238,6 +244,13 @@ class EnemyAttackSystem {
         projectile.userData.maxLifetime = this.projectileLifetime;
         projectile.userData.startTime = performance.now() / 1000;
         projectile.visible = true;
+        projectile.scale.setScalar(1.0);
+        projectile.material.opacity = 1.0;
+        
+        // デバッグ情報出力（10%の確率で）
+        if (Math.random() < 0.1) {
+            console.log(`弾丸生成: 位置=${projectile.position.x.toFixed(3)}, ${projectile.position.y.toFixed(3)}, ${projectile.position.z.toFixed(3)}, 速度=${projectile.userData.velocity.x.toFixed(3)}, ${projectile.userData.velocity.y.toFixed(3)}, ${projectile.userData.velocity.z.toFixed(3)}, visible=${projectile.visible}, active=${projectile.userData.active}, inScene=${this.scene.children.includes(projectile)}, poolIndex=${this.projectilePool.indexOf(projectile)}`);
+        }
         
         this.enemyProjectiles.push(projectile);
         this.activeProjectileCount++;
@@ -272,6 +285,14 @@ class EnemyAttackSystem {
     
     // 弾丸を更新
     updateProjectiles(deltaTime) {
+        // デバッグ: アクティブ弾丸数を定期的に出力
+        const currentTime = performance.now() / 1000;
+        if (!this.lastProjectileDebugTime) this.lastProjectileDebugTime = 0;
+        if (currentTime - this.lastProjectileDebugTime > 3.0) {
+            console.log(`弾丸更新: アクティブ弾丸数=${this.enemyProjectiles.length}, プール使用率=${this.activeProjectileCount}/${this.maxProjectiles}`);
+            this.lastProjectileDebugTime = currentTime;
+        }
+        
         for (let i = this.enemyProjectiles.length - 1; i >= 0; i--) {
             const projectile = this.enemyProjectiles[i];
             
@@ -290,18 +311,21 @@ class EnemyAttackSystem {
             const distanceFromCenter = projectile.position.length();
             if (distanceFromCenter <= 1.0 + this.projectileRadius) {
                 // 地球に衝突
+                console.log(`弾丸削除: 地球衝突 距離=${distanceFromCenter.toFixed(3)}`);
                 this.removeProjectile(projectile, i);
                 continue;
             }
             
             // 人工衛星軌道より大幅に遠くに行った弾丸は削除
             if (distanceFromCenter > 5.0) {
+                console.log(`弾丸削除: 軌道外 距離=${distanceFromCenter.toFixed(3)}`);
                 this.removeProjectile(projectile, i);
                 continue;
             }
             
             // 寿命切れチェック
             if (projectile.userData.lifetime <= 0) {
+                console.log(`弾丸削除: 寿命切れ lifetime=${projectile.userData.lifetime.toFixed(3)}`);
                 this.removeProjectile(projectile, i);
                 continue;
             }
@@ -388,6 +412,11 @@ class EnemyAttackSystem {
                     startTime: performance.now() / 1000
                 });
                 attacksExecuted++;
+                
+                // 攻撃ログ（すべての敵で統一）
+                if (Math.random() < 0.05) { // 5%の確率でログ出力
+                    console.log(`🎯 子敵が攻撃: ID=${enemy.userData.id}, 位置=(${enemy.userData.position.x.toFixed(3)}, ${enemy.userData.position.y.toFixed(3)}, ${enemy.userData.position.z.toFixed(3)})`);
+                }
             }
         }
         

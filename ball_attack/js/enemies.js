@@ -305,26 +305,40 @@ class EnemySystem {
         debugLog(`敵プールを初期化: ${this.maxEnemies}個`);
     }
     
-    generateEnemies(count = 300) {
+    // 単一の敵配置メカニズム - ランダム配置または指定位置配置
+    generateEnemies(count = 300, specificPositions = null) {
         const targetCount = Math.min(count, this.maxEnemies);
         const positions = [];
         
         // 重複回避のため既存の位置を記録
         const existingPositions = [];
         
-        for (let i = 0; i < targetCount; i++) {
+        // 指定位置がある場合はそれを使用、ない場合はランダム生成
+        const useSpecificPositions = specificPositions && specificPositions.length > 0;
+        const actualCount = useSpecificPositions ? Math.min(specificPositions.length, targetCount) : targetCount;
+        
+        for (let i = 0; i < actualCount; i++) {
             let attempts = 0;
             let validPosition = false;
             let lat, lng, position;
             
             // 最大100回試行して有効な位置を見つける
             while (!validPosition && attempts < 100) {
-                // ランダムな緯度経度を生成
-                lat = (Math.random() - 0.5) * 180; // -90°〜90°
-                lng = (Math.random() - 0.5) * 360; // -180°〜180°
-                
-                // 3D座標に変換
-                position = this.latLngToCartesian(lat, lng, this.earthRadius + this.enemyHeightOffset);
+                if (useSpecificPositions) {
+                    // 指定位置を使用（親敵による配置）
+                    position = specificPositions[i].clone();
+                    // 3D座標から緯度経度に逆算
+                    const latLng = this.cartesianToLatLng(position);
+                    lat = latLng.lat;
+                    lng = latLng.lng;
+                } else {
+                    // ランダムな緯度経度を生成（初期配置）
+                    lat = (Math.random() - 0.5) * 180; // -90°〜90°
+                    lng = (Math.random() - 0.5) * 360; // -180°〜180°
+                    
+                    // 3D座標に変換
+                    position = this.latLngToCartesian(lat, lng, this.earthRadius + this.enemyHeightOffset);
+                }
                 
                 // 既存の敵との距離チェック
                 validPosition = true;
@@ -339,42 +353,15 @@ class EnemySystem {
             }
             
             if (validPosition) {
-                // 敵を配置
-                const enemy = this.getInactiveEnemy();
+                // 敵を配置（完全に同じロジック）
+                const enemy = this.createSingleEnemy(position, lat, lng);
                 if (enemy) {
-                    enemy.userData.latitude = lat;
-                    enemy.userData.longitude = lng;
-                    enemy.userData.position.copy(position);
-                    enemy.userData.active = true;
-                    enemy.userData.isDestroying = false;
-                    enemy.userData.currentLife = enemy.userData.maxLife;
-                    
-                    // IDを追加（敵攻撃システムで必要）
-                    if (!enemy.userData.id) {
-                        enemy.userData.id = `enemy_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                    }
-                    
-                    enemy.position.copy(position);
-                    enemy.visible = true;
-                    enemy.scale.setScalar(1.0);
-                    enemy.material.opacity = 1.0;
-                    
-                    // 初期配置敵は即座に攻撃可能状態に設定
-                    enemy.userData.isSpawning = false;
-                    enemy.userData.placedByParent = null; // 初期配置
-                    enemy.material.emissive.setHex(this.enemyEmissiveColor);
-                    enemy.material.emissiveIntensity = 1.0;
-                    
-                    console.log(`Initial Enemy placed: ID=${enemy.userData.id}, active=${enemy.userData.active}, visible=${enemy.visible}`);
-                    
                     existingPositions.push(position.clone());
-                    this.activeEnemyCount++;
-                    this.totalEnemiesSpawned++;
                 }
             }
         }
         
-        debugLog(`敵を配置: ${this.activeEnemyCount}個（目標: ${targetCount}個）`);
+        debugLog(`敵を配置: ${this.activeEnemyCount}個（目標: ${actualCount}個）`);
         return this.activeEnemyCount;
     }
     
@@ -385,6 +372,45 @@ class EnemySystem {
             }
         }
         return null;
+    }
+    
+    // 単一の敵作成ロジック（全ての配置方法で共通）
+    createSingleEnemy(position, lat, lng) {
+        const enemy = this.getInactiveEnemy();
+        if (!enemy) {
+            return null;
+        }
+        
+        // 基本設定
+        enemy.userData.latitude = lat;
+        enemy.userData.longitude = lng;
+        enemy.userData.position.copy(position);
+        enemy.userData.active = true;
+        enemy.userData.isDestroying = false;
+        enemy.userData.currentLife = enemy.userData.maxLife;
+        
+        // IDを追加（敵攻撃システムで必要）
+        enemy.userData.id = `enemy_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Three.js位置設定
+        enemy.position.copy(position);
+        enemy.visible = true;
+        enemy.scale.setScalar(1.0);
+        enemy.material.opacity = 1.0;
+        
+        // 全ての敵で共通の設定
+        enemy.userData.isSpawning = false;
+        enemy.userData.placementTime = Date.now();
+        enemy.userData.hasBeenEnergySource = false;
+        enemy.material.emissive.setHex(this.enemyEmissiveColor);
+        enemy.material.emissiveIntensity = 1.0;
+        
+        this.activeEnemyCount++;
+        this.totalEnemiesSpawned++;
+        
+        console.log(`Enemy created: ID=${enemy.userData.id}, position=(${position.x.toFixed(3)}, ${position.y.toFixed(3)}, ${position.z.toFixed(3)})`);
+        
+        return enemy;
     }
     
     // 緯度経度から3D座標への変換
@@ -542,10 +568,10 @@ class EnemySystem {
             if (enemy.userData.isDestroying) {
                 this.updateDestroyAnimation(enemy, deltaTime);
             }
-            // 配置直後の点滅エフェクト更新
-            if (enemy.userData.isSpawning) {
-                this.updateSpawnEffect(enemy);
-            }
+            // 配置直後の点滅エフェクト更新（削除：初期配置と同じ仕様にする）
+            // if (enemy.userData.isSpawning) {
+            //     this.updateSpawnEffect(enemy);
+            // }
         }
         
         // 撃破パーティクルシステムの更新
@@ -665,61 +691,24 @@ class EnemySystem {
         return this.activeEnemyCount;
     }
     
-    // 特定位置に子敵を追加（親敵による配置用）
+    // 特定位置に子敵を追加（親敵による配置用）- generateEnemiesを使用
     addEnemyAtPosition(position, parentId = null) {
-        // 利用可能な敵オブジェクトを探す（非表示の敵を探す）
-        const enemy = this.enemies.find(e => !e.visible);
-        if (!enemy) {
-            // 警告の頻度を下げる（10%の確率で出力）
-            if (Math.random() < 0.1) {
-                console.warn('利用可能な敵オブジェクトがありません');
+        // 単一の配置メカニズム（generateEnemies）を使用
+        const positions = [position];
+        const beforeCount = this.activeEnemyCount;
+        this.generateEnemies(1, positions);
+        const afterCount = this.activeEnemyCount;
+        
+        // 配置に成功した場合、新しく作成された敵を返す
+        if (afterCount > beforeCount) {
+            // 最後に作成された敵を返す（暫定的）
+            for (let enemy of this.enemies) {
+                if (enemy.userData.active && enemy.position.distanceTo(position) < 0.01) {
+                    return enemy;
+                }
             }
-            return null;
         }
-        
-        // 敵を配置（初期配置と同じ仕様に統一）
-        const latLng = this.cartesianToLatLng(position);
-        enemy.userData.latitude = latLng.lat;
-        enemy.userData.longitude = latLng.lng;
-        enemy.userData.position.copy(position);
-        enemy.userData.active = true;
-        enemy.userData.isDestroying = false;
-        enemy.userData.currentLife = enemy.userData.maxLife;
-        
-        // IDを追加（敵攻撃システムで必要）
-        if (!enemy.userData.id) {
-            enemy.userData.id = `enemy_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        }
-        
-        enemy.position.copy(position);
-        enemy.visible = true;
-        enemy.scale.setScalar(1.0);
-        enemy.material.opacity = 1.0;
-        
-        // 親敵情報を記録（Phase Cで使用）
-        enemy.userData.placedByParent = parentId;
-        enemy.userData.placementTime = Date.now();
-        enemy.userData.hasBeenEnergySource = false;
-        
-        // 配置直後のエフェクト（親敵配置のみ）
-        if (parentId) {
-            enemy.userData.isSpawning = true;
-            enemy.userData.spawnTime = Date.now();
-            enemy.userData.spawnDuration = 3000; // 3秒
-        } else {
-            // 初期配置の敵は通常の赤色
-            enemy.userData.isSpawning = false;
-            enemy.material.emissive.setHex(this.enemyEmissiveColor);
-            enemy.material.emissiveIntensity = 1.0;
-        }
-        
-        this.activeEnemyCount++;
-        this.totalEnemiesSpawned++;
-        
-        // デバッグ出力
-        console.log(`Enemy placed: ID=${enemy.userData.id}, active=${enemy.userData.active}, visible=${enemy.visible}, parent=${parentId || 'initial'}`);
-        
-        return enemy;
+        return null;
     }
     
     // 3D座標から緯度経度に変換

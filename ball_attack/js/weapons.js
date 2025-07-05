@@ -179,7 +179,7 @@ class WeaponSystem {
         this.isLeftGun = true; // 左右交互発射用
         
         // 弾丸設定
-        this.bulletSpeed = 0.15; // 弾丸速度係数 (0.6の1/4)
+        this.bulletSpeed = 0.30; // 弾丸速度係数（倍に）
         this.bulletLifetime = 10.0; // 弾丸寿命（秒）を延長
         
         // 銃の位置設定

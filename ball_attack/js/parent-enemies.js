@@ -19,7 +19,7 @@ class ParentEnemy {
         // 位置・移動関連
         this.position = new THREE.Vector3();
         this.targetPosition = new THREE.Vector3();
-        this.moveSpeed = 0.25; // rad/sec（速度を半分に）
+        this.moveSpeed = 0.125; // rad/sec（速度を半分に）
         this.isMoving = false;
         
         // 回復システム関連
@@ -326,7 +326,7 @@ class ParentEnemySystem {
         this.enemySystem = null; // EnemySystemの参照
         this.childEnemyRadius = 0.01; // 子敵の半径
         this.placementCheckRadius = this.childEnemyRadius * 5; // 配置制約範囲
-        this.placementInterval = 2.0; // 配置間隔（秒）- 頻度を下げる
+        this.placementInterval = 1.0; // 配置間隔（秒）- 頻度を倍に
         this.lastPlacementTime = 0;
         
         // エフェクト用参照
@@ -437,8 +437,8 @@ class ParentEnemySystem {
                 testPosition.x += offsetX;
                 testPosition.z += offsetZ;
                 
-                // 地球表面に正規化
-                testPosition.normalize().multiplyScalar(this.earthRadius);
+                // 地球表面に正規化（初期配置と同じ高度）
+                testPosition.normalize().multiplyScalar(this.earthRadius + 0.005);
                 
                 // 配置可能かチェック
                 if (this.canPlaceChildEnemy(testPosition)) {
