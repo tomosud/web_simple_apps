@@ -178,7 +178,7 @@ class SatelliteOrbitControls {
         this.dragScale = dragScale;
         
         // タッチ感度設定
-        this.touchSensitivity = 1.0;  // デフォルト値
+        this.touchSensitivity = 30;  // デフォルト値
         
         // 慣性システム（重い物理挙動）
         this.velocity = { x: 0, y: 0 };

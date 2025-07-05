@@ -343,7 +343,7 @@ class BallAttackGame {
                 if (this.controls) {
                     this.controls.touchSensitivity = value;
                 }
-                touchSensitivityValue.textContent = value.toFixed(1);
+                touchSensitivityValue.textContent = value;
             });
         }
     }
@@ -382,25 +382,65 @@ class BallAttackGame {
     }
     
     onMouseDown(event) {
+        // UI要素への操作の場合は射撃しない
+        if (this.isUIElement(event.target)) {
+            return;
+        }
+        
         event.preventDefault();
         this.isMouseDown = true;
         this.fire();
     }
     
     onMouseUp(event) {
+        // UI要素への操作の場合は何もしない
+        if (this.isUIElement(event.target)) {
+            return;
+        }
+        
         event.preventDefault();
         this.isMouseDown = false;
     }
     
     onTouchStart(event) {
+        // UI要素への操作の場合は射撃しない
+        if (this.isUIElement(event.target)) {
+            return;
+        }
+        
         event.preventDefault();
         this.isMouseDown = true;
         this.fire();
     }
     
     onTouchEnd(event) {
+        // UI要素への操作の場合は何もしない
+        if (this.isUIElement(event.target)) {
+            return;
+        }
+        
         event.preventDefault();
         this.isMouseDown = false;
+    }
+    
+    isUIElement(element) {
+        // UI要素かどうかを判定
+        while (element && element !== document.body) {
+            // input要素、button要素、または特定のクラスを持つ要素はUI要素
+            if (element.tagName === 'INPUT' || 
+                element.tagName === 'BUTTON' ||
+                element.tagName === 'SELECT' ||
+                element.classList.contains('touch-controls') ||
+                element.classList.contains('weapon-controls') ||
+                element.classList.contains('physics-controls') ||
+                element.classList.contains('mode-indicator') ||
+                element.classList.contains('fire-button') ||
+                element.classList.contains('game-ui')) {
+                return true;
+            }
+            element = element.parentElement;
+        }
+        return false;
     }
     
     onFireButtonClick(event) {
