@@ -550,20 +550,28 @@ class BallAttackGame {
     }
     
     calculateOptimalDistance() {
-        // 画面の短い方の辺に地球をフィットさせる
-        const aspectRatio = window.innerWidth / window.innerHeight;
+        // 短い方の辺に地球2個分が収まるように距離を計算
         const fov = 75 * (Math.PI / 180); // カメラのFOVをラジアンに変換
+        const aspectRatio = window.innerWidth / window.innerHeight;
         
-        // 短い方の辺を基準にする
-        const minDimension = Math.min(window.innerWidth, window.innerHeight);
-        const maxDimension = Math.max(window.innerWidth, window.innerHeight);
+        // 短い方の辺に地球2個分（直径4）が収まるように計算
+        // 地球の直径 = 2 * earthRadius = 2
+        // 目標サイズ = 地球2個分 = 4
+        const targetDiameter = this.earthRadius * 4; // 地球2個分の直径
         
-        // 地球の半径 + マージンを考慮して距離を計算
-        // 短い方の辺の80%に地球が収まるようにする
-        const targetSize = minDimension * 0.8;
-        const distance = (this.earthRadius * 2) / (2 * Math.tan(fov / 2)) * (maxDimension / targetSize);
+        // カメラのFOVから必要な距離を計算
+        let distance;
+        if (aspectRatio >= 1) {
+            // 横長画面：縦方向（短い方）にフィット
+            distance = targetDiameter / (2 * Math.tan(fov / 2));
+        } else {
+            // 縦長画面：横方向（短い方）にフィット
+            const horizontalFov = 2 * Math.atan(Math.tan(fov / 2) * aspectRatio);
+            distance = targetDiameter / (2 * Math.tan(horizontalFov / 2));
+        }
         
-        return Math.max(2.0, Math.min(3.5, distance)); // 最小2.0、最大3.5で制限
+        // 弾丸が届く範囲内に制限（最小2.0、最大2.8）
+        return Math.max(2.0, Math.min(2.8, distance));
     }
     
     onWindowResize() {
