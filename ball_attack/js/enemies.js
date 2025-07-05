@@ -259,7 +259,7 @@ class EnemySystem {
         
         // 敵の外観設定
         this.enemyColor = 0xff0000; // 赤色
-        this.enemyEmissiveColor = 0x330000; // 暗い赤色の発光
+        this.enemyEmissiveColor = 0xff3333; // 赤色の発光（3倍明るく）
         
         // 撃破エフェクト設定
         this.destroyAnimationDuration = 0.5; // 撃破アニメーション時間

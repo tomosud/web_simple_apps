@@ -32,8 +32,8 @@ class BallAttackGame {
         this.earthRadius = 1;
         this.earthTexture = null;
         
-        // 人工衛星の設定
-        this.satelliteOrbitRadius = 1.3;
+        // 人工衛星の設定（画面にフィットする固定距離）
+        this.satelliteOrbitRadius = 2.2;
         this.satellitePosition = new THREE.Vector3(0, 0, this.satelliteOrbitRadius);
         
         // 軌道球（見えない制御用オブジェクト）
@@ -249,6 +249,13 @@ class BallAttackGame {
         // キーボードイベント
         document.addEventListener('keydown', this.onKeyDown.bind(this));
         
+        // マウスイベント（射撃）
+        this.isMouseDown = false;
+        document.addEventListener('mousedown', this.onMouseDown.bind(this));
+        document.addEventListener('mouseup', this.onMouseUp.bind(this));
+        document.addEventListener('touchstart', this.onTouchStart.bind(this), { passive: false });
+        document.addEventListener('touchend', this.onTouchEnd.bind(this));
+        
         // 発射ボタンのイベント
         const fireButton = document.getElementById('fireButton');
         if (fireButton) {
@@ -347,11 +354,6 @@ class BallAttackGame {
                 // ゲームリセット
                 this.resetGame();
                 break;
-            case 'Space':
-                // 発射
-                event.preventDefault();
-                this.fire();
-                break;
             case 'KeyW':
                 // ワイヤーフレーム表示切り替え
                 if (this.weaponSystem) {
@@ -359,6 +361,28 @@ class BallAttackGame {
                 }
                 break;
         }
+    }
+    
+    onMouseDown(event) {
+        event.preventDefault();
+        this.isMouseDown = true;
+        this.fire();
+    }
+    
+    onMouseUp(event) {
+        event.preventDefault();
+        this.isMouseDown = false;
+    }
+    
+    onTouchStart(event) {
+        event.preventDefault();
+        this.isMouseDown = true;
+        this.fire();
+    }
+    
+    onTouchEnd(event) {
+        event.preventDefault();
+        this.isMouseDown = false;
     }
     
     onFireButtonClick(event) {
@@ -558,6 +582,11 @@ class BallAttackGame {
         // カメラモードの場合、カメラ位置を更新
         if (!this.debugMode) {
             this.updateCameraPosition();
+        }
+        
+        // 連続射撃処理
+        if (this.isMouseDown && this.isGameRunning) {
+            this.fire();
         }
         
         // 武器システムの更新

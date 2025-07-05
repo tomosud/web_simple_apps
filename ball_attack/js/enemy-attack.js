@@ -22,10 +22,10 @@ class EnemyAttackSystem {
         this.attackAngleMax = 90; // 攻撃角度の最大値（度）- ほぼ真上まで
         this.attackInterval = 0.02; // 攻撃間隔（秒）- 極めて頻繁に
         this.maxSimultaneousAttacks = 50; // 同時攻撃可能数 - 大幅増加
-        this.projectileSpeed = 0.15; // 弾丸速度（プレイヤーと同等）
+        this.projectileSpeed = 0.3; // 弾丸速度（プレイヤーの2倍）
         
         // 弾丸仕様
-        this.projectileRadius = 0.006; // 弾丸半径（少し大きく）
+        this.projectileRadius = 0.003; // 弾丸半径（半分に）
         this.projectileColor = 0x00ff00; // 緑色
         this.projectileEmissive = 0x00ff00; // 緑色の発光（明るく）
         this.projectileLifetime = 20.0; // 弾丸寿命（秒）- 地球から人工衛星まで届くよう延長
@@ -53,6 +53,7 @@ class EnemyAttackSystem {
     initProjectilePool() {
         // 敵弾丸プールを初期化
         const geometry = new THREE.SphereGeometry(this.projectileRadius, 6, 4);
+        geometry.scale(0.5, 0.5, 5); // X,Y軸を半分にして、Z軸を5倍に伸ばす
         const material = new THREE.MeshStandardMaterial({
             color: this.projectileColor,
             emissive: this.projectileEmissive,
@@ -190,6 +191,12 @@ class EnemyAttackSystem {
         
         // 散らばり方向を加算
         direction.add(perpendicular.multiplyScalar(spreadAngle)).normalize();
+        
+        // 弾丸の向きを進行方向に設定（速度設定前に）
+        const lookDirection = direction.clone();
+        const quaternion = new THREE.Quaternion();
+        quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), lookDirection);
+        projectile.quaternion.copy(quaternion);
         
         // 速度設定
         projectile.userData.velocity.copy(direction.multiplyScalar(this.projectileSpeed));

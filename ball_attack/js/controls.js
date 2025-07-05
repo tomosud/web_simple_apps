@@ -251,23 +251,8 @@ class SatelliteOrbitControls {
     _pointerMove(e) {
         e.preventDefault();
         
-        // ピンチジェスチャの処理
+        // ピンチズーム機能を廃止
         if (e.touches && e.touches.length === 2) {
-            const touch1 = e.touches[0];
-            const touch2 = e.touches[1];
-            const currentDistance = Math.sqrt(
-                Math.pow(touch2.clientX - touch1.clientX, 2) +
-                Math.pow(touch2.clientY - touch1.clientY, 2)
-            );
-            
-            if (this._lastTouchDistance > 0) {
-                const distanceChange = currentDistance - this._lastTouchDistance;
-                // ピンチイン/アウトで半径変更
-                const force = -distanceChange * 0.001;  // 感度調整
-                this.radiusVelocity += force / this.radiusMass;
-            }
-            
-            this._lastTouchDistance = currentDistance;
             return;
         }
         
@@ -285,8 +270,16 @@ class SatelliteOrbitControls {
         // 現在の速度を計算
         const currentSpeed = Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y);
         
-        // 速度に応じて乗算値を調整（動いてるときは加算的、止まってるときは弱く）
-        const speedFactor = currentSpeed > 0.001 ? 0.2 : 0.1;  // 動いてる時は0.2、止まってる時は0.1（半分）
+        // タッチデバイスかどうかを判定
+        const isTouchDevice = e.touches && e.touches.length > 0;
+        
+        // 速度に応じて乗算値を調整（スマホでは感度を下げる）
+        let speedFactor;
+        if (isTouchDevice) {
+            speedFactor = currentSpeed > 0.001 ? 0.1 : 0.05;  // スマホ：動いてる時は0.1、止まってる時は0.05
+        } else {
+            speedFactor = currentSpeed > 0.001 ? 0.2 : 0.1;   // PC：動いてる時は0.2、止まってる時は0.1
+        }
         
         // ドラッグ力を計算
         const forceX = (-dX * this.dragScale * speedFactor);
@@ -319,20 +312,11 @@ class SatelliteOrbitControls {
     
     _handleWheel(e) {
         e.preventDefault();
-        
-        // ホイールの回転量に応じて半径を変更（速度を3倍に）
-        const force = e.deltaY * 0.0003;  // 感度を3倍に変更（0.0001 → 0.0003）
-        this.radiusVelocity += force / this.radiusMass;
+        // ホイールズーム機能を廃止
     }
     
     update() {
-        // 軌道半径の慣性システム
-        this.radiusVelocity *= this.radiusFriction;
-        this.orbitRadius += this.radiusVelocity;
-        this.orbitRadius = THREE.MathUtils.clamp(this.orbitRadius, this.minRadius, this.maxRadius);
-        
-        // 微小な半径変化速度は停止
-        if (Math.abs(this.radiusVelocity) < 0.001) this.radiusVelocity = 0;
+        // 軌道半径は固定（ズーム機能廃止）
         
         // 現在の速度を計算
         const currentSpeed = Math.sqrt(this.velocity.x * this.velocity.x + this.velocity.y * this.velocity.y);

@@ -205,7 +205,7 @@ class WeaponSystem {
         this.attackSphereLifetime = 0.1; // 攻撃判定の有効時間（短時間）
         
         // 散らばりパラメータ
-        this.spreadFactor = 0.05; // 着弾散らばり係数
+        this.spreadFactor = 0.19; // 着弾散らばり係数
         
         this.initBulletPool();
         this.initParticleSystem();
@@ -217,6 +217,7 @@ class WeaponSystem {
         // 弾丸オブジェクトプールを初期化（Sphereに戻す）
         for (let i = 0; i < this.maxBullets; i++) {
             const bulletGeometry = new THREE.SphereGeometry(0.002, 8, 8); // 大きさ半分
+            bulletGeometry.scale(0.5, 0.5, 5); // X,Y軸を半分にして、Z軸を5倍に伸ばす
             const bulletMaterial = new THREE.MeshStandardMaterial({ 
                 color: 0xffff00,
                 emissive: 0xffff00, // エミッシブで明るく発光
@@ -323,6 +324,12 @@ class WeaponSystem {
         bullet.userData.baseVelocity = directionToEarth.clone().add(spreadOffset).multiplyScalar(this.bulletSpeed);
         bullet.userData.lifetime = 0;
         bullet.userData.active = true;
+        
+        // 弾丸の向きを進行方向に設定
+        const bulletDirection = directionToEarth.clone().add(spreadOffset).normalize();
+        const quaternion = new THREE.Quaternion();
+        quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), bulletDirection);
+        bullet.quaternion.copy(quaternion);
         
         
         // 各弾で個別の振動パラメータをよりランダム化（周期を3倍に）
