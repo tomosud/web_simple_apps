@@ -168,7 +168,7 @@ class WeaponSystem {
         this.flashLightOverlapDistance = 0.1; // 重複判定距離
         
         // 攻撃判定球仕様
-        this.attackRange = 0.06; // 攻撃範囲半径（ポイントライトと連動）
+        this.attackRange = 0.036; // 攻撃範囲半径（0.6倍に縮小、ポイントライトと連動）
         this.centerDamage = 1.0; // 中心部致死性100%
         this.borderDamage = 0.2; // 境界部致死性20%
         
@@ -245,7 +245,7 @@ class WeaponSystem {
     initFlashLightPool() {
         // 点灯用ポイントライトプールを初期化
         for (let i = 0; i < this.maxFlashLights; i++) {
-            const flashLight = new THREE.PointLight(0xffaa00, 100.0, this.attackRange); // 攻撃範囲と連動
+            const flashLight = new THREE.PointLight(0xffaa00, 100.0, this.attackRange); // 明るさ100に復帰、攻撃範囲と連動
             flashLight.visible = false;
             flashLight.userData = {
                 lifetime: 0,
@@ -360,7 +360,7 @@ class WeaponSystem {
             // 地上より少し浮かせた位置で爆発
             const explosionPosition = position.clone();
             const surfaceNormal = position.clone().normalize();
-            explosionPosition.add(surfaceNormal.multiplyScalar(0.02)); // 地表から少し浮かせる
+            explosionPosition.add(surfaceNormal.multiplyScalar(0.01)); // 地表により近づける
             
             this.particleSystem.createExplosion(explosionPosition, 1.0, 0xffaa00);
         }
@@ -368,7 +368,7 @@ class WeaponSystem {
         // 点灯エフェクトを作成（重複チェック付き）
         const lightPosition = position.clone();
         const surfaceNormal = position.clone().normalize();
-        lightPosition.add(surfaceNormal.multiplyScalar(0.03)); // 地表から少し浮かせる
+        lightPosition.add(surfaceNormal.multiplyScalar(0.01)); // 地表により近づける
         
         // 既存のライトとの重複チェック
         this.checkAndRemoveOverlappingLights(lightPosition);
@@ -452,7 +452,7 @@ class WeaponSystem {
             // 滑らかな減衰（イージング関数使用）
             const progress = flashLight.userData.lifetime / flashLight.userData.maxLifetime;
             const easeOut = 1 - Math.pow(progress, 2); // 二次関数で滑らかな減衰
-            flashLight.intensity = 100.0 * easeOut; // 明るさ3倍に調整
+            flashLight.intensity = 100.0 * easeOut; // 明るさ100に復帰
             
             // 点灯の削除
             if (flashLight.userData.lifetime > flashLight.userData.maxLifetime) {

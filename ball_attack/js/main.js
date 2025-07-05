@@ -130,9 +130,10 @@ class BallAttackGame {
             }
         );
         
-        // 地球のマテリアル
-        const earthMaterial = new THREE.MeshLambertMaterial({
-            map: this.earthTexture
+        // 地球のマテリアル（ピクセルライティング対応）
+        const earthMaterial = new THREE.MeshPhongMaterial({
+            map: this.earthTexture,
+            shininess: 0  // 反射を抑制して自然な見た目に
         });
         
         // 地球メッシュ作成
