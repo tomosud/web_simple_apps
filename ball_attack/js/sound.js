@@ -15,7 +15,8 @@ class SoundSystem {
             cannon: 0.3,    // 発射音
             impact: 0.4,    // 爆発音
             swipe: 0.2,     // UI音
-            enemyDestroy: 0.3  // 敵撃破音
+            enemyDestroy: 0.3,  // 敵撃破音
+            enemyCannon: 0.35   // 敵攻撃音
         };
         
         this.loadSounds();
@@ -30,15 +31,16 @@ class SoundSystem {
             cannon: 'Canon',
             impact: 'impact',
             hit: 'hit',
-            swipe: 'Swipe.wav'
+            swipe: 'Swipe.wav',
+            enemyCannon: 'Enemy_Canon.wav'
         };
         
         // 連番サウンドの自動検出とロード
         for (const [category, baseName] of Object.entries(baseSoundFiles)) {
-            if (category === 'swipe') {
-                // swipeは単体ファイル
-                this.sounds['swipe'] = new Audio(`assets/sound/${baseName}`);
-                this.sounds['swipe'].preload = 'auto';
+            if (category === 'swipe' || category === 'enemyCannon') {
+                // swipeとenemyCannonは単体ファイル
+                this.sounds[category] = new Audio(`assets/sound/${baseName}`);
+                this.sounds[category].preload = 'auto';
                 continue;
             }
             
@@ -69,7 +71,7 @@ class SoundSystem {
                     audio.addEventListener('error', reject, { once: true });
                     
                     // タイムアウト設定
-                    setTimeout(() => reject(new Error('Timeout')), 1000);
+                    setTimeout(() => reject(new Error('Timeout')), 2000);
                 });
                 
                 soundArray.push(audio);
@@ -77,6 +79,7 @@ class SoundSystem {
                 index++;
             } catch (error) {
                 // ファイルが見つからない場合は終了
+                debugLog(`サウンドファイルが見つかりません: ${fileName} (${error.message})`);
                 break;
             }
         }
@@ -195,6 +198,13 @@ class SoundSystem {
     /**
      * 全ての音を停止
      */
+    /**
+     * 敵攻撃音を再生
+     */
+    playEnemyAttackSound() {
+        this.playSound('enemyCannon', this.volumes.enemyCannon);
+    }
+    
     stopAllSounds() {
         this.activeSounds.forEach(sound => {
             sound.pause();

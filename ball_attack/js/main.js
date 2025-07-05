@@ -48,6 +48,9 @@ class BallAttackGame {
         // 敵システム
         this.enemySystem = null;
         
+        // 敵砲撃システム
+        this.enemyAttackSystem = null;
+        
         this.init();
     }
     
@@ -60,6 +63,7 @@ class BallAttackGame {
             this.setupControls();
             this.setupWeapons();
             this.setupEnemies();
+            this.setupEnemyAttack();
             this.setupEventListeners();
             this.setupPerformanceMonitor();
             this.hideLoading();
@@ -79,7 +83,7 @@ class BallAttackGame {
         this.camera = new THREE.PerspectiveCamera(
             75,
             window.innerWidth / window.innerHeight,
-            0.1,
+            0.01, // ニアクリップを0.1から0.01に変更
             1000
         );
         this.camera.position.set(0, 0, 3.5);
@@ -230,6 +234,12 @@ class BallAttackGame {
         // 敵を配置
         this.enemySystem.generateEnemies(300);
         debugLog('敵システムが初期化されました');
+    }
+    
+    setupEnemyAttack() {
+        // 敵砲撃システムの初期化
+        this.enemyAttackSystem = new EnemyAttackSystem(this.scene, this.satellite, this.soundSystem);
+        debugLog('敵砲撃システムが初期化されました');
     }
     
     setupEventListeners() {
@@ -383,6 +393,11 @@ class BallAttackGame {
             this.enemySystem.generateEnemies(300);
         }
         
+        // 敵砲撃システムをリセット
+        if (this.enemyAttackSystem) {
+            this.enemyAttackSystem.reset();
+        }
+        
         // カメラモードの場合、カメラ位置も更新
         if (!this.debugMode) {
             this.updateCameraPosition();
@@ -483,6 +498,52 @@ class BallAttackGame {
         this.updateUI();
     }
     
+    checkPlayerHit(playerPosition) {
+        if (!this.enemyAttackSystem) {
+            return;
+        }
+        
+        // 敵弾丸とプレイヤーの衝突チェック
+        const hits = this.enemyAttackSystem.checkPlayerHit(playerPosition, 0.05);
+        
+        if (hits.length > 0) {
+            // 被弾時の処理
+            this.onPlayerHit(hits[0]);
+        }
+    }
+    
+    onPlayerHit(hitInfo) {
+        debugLog('プレイヤー被弾！', hitInfo);
+        
+        // 被弾した弾丸を削除
+        const projectileIndex = this.enemyAttackSystem.enemyProjectiles.indexOf(hitInfo.projectile);
+        if (projectileIndex !== -1) {
+            this.enemyAttackSystem.removeProjectile(hitInfo.projectile, projectileIndex);
+        }
+        
+        // 画面全体赤フラッシュエフェクト
+        this.triggerDamageFlash();
+        
+        // 被弾エフェクト（将来実装）
+        // - カメラシェイク
+        // - ダメージ音
+        // - ライフ減少
+    }
+    
+    // 画面全体の赤フラッシュエフェクト
+    triggerDamageFlash() {
+        const flashElement = document.getElementById('damageFlash');
+        if (flashElement) {
+            // フラッシュを表示
+            flashElement.classList.add('active');
+            
+            // 0.3秒後にフラッシュを消去
+            setTimeout(() => {
+                flashElement.classList.remove('active');
+            }, 300);
+        }
+    }
+    
     onGameClear() {
         debugLog('ゲームクリア！');
         // クリア時の処理（将来実装）
@@ -507,6 +568,19 @@ class BallAttackGame {
         // 敵システムの更新
         if (this.enemySystem) {
             this.enemySystem.update(deltaTime);
+        }
+        
+        // 敵砲撃システムの更新
+        if (this.enemyAttackSystem && this.enemySystem) {
+            // 人工衛星の現在位置を取得
+            const satelliteWorldPosition = new THREE.Vector3();
+            this.satellite.getWorldPosition(satelliteWorldPosition);
+            
+            // 敵砲撃システムを更新
+            this.enemyAttackSystem.update(deltaTime, this.enemySystem.enemies, satelliteWorldPosition);
+            
+            // プレイヤーへの被弾チェック
+            this.checkPlayerHit(satelliteWorldPosition);
         }
         
         // 衝突判定とスコア更新
@@ -557,6 +631,10 @@ class BallAttackGame {
         
         if (this.enemySystem) {
             this.enemySystem.dispose();
+        }
+        
+        if (this.enemyAttackSystem) {
+            this.enemyAttackSystem.dispose();
         }
         
         if (this.renderer) {
