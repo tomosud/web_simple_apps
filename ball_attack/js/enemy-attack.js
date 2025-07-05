@@ -22,12 +22,12 @@ class EnemyAttackSystem {
         this.attackAngleMax = 90; // 攻撃角度の最大値（度）- ほぼ真上まで
         this.attackInterval = 0.02; // 攻撃間隔（秒）- 極めて頻繁に
         this.maxSimultaneousAttacks = 50; // 同時攻撃可能数 - 大幅増加
-        this.projectileSpeed = 0.3; // 弾丸速度（プレイヤーの2倍）
+        this.projectileSpeed = 0.1; // 弾丸速度（ゆっくりして見えやすく）
         
         // 弾丸仕様
-        this.projectileRadius = 0.003; // 弾丸半径（半分に）
+        this.projectileRadius = 0.003; // 弾丸半径（元のサイズ）
         this.projectileColor = 0x00ff00; // 緑色
-        this.projectileEmissive = 0x00ff00; // 緑色の発光（明るく）
+        this.projectileEmissive = 0x00ff00; // 緑色の発光
         this.projectileLifetime = 20.0; // 弾丸寿命（秒）- 地球から人工衛星まで届くよう延長
         
         // 攻撃状態管理
@@ -45,6 +45,9 @@ class EnemyAttackSystem {
         this.totalShotsFired = 0;
         this.activeProjectileCount = 0;
         
+        // デバッグ用
+        this.lastDebugTime = 0;
+        
         this.initProjectilePool();
         
         debugLog('敵砲撃システムを初期化');
@@ -53,7 +56,7 @@ class EnemyAttackSystem {
     initProjectilePool() {
         // 敵弾丸プールを初期化
         const geometry = new THREE.SphereGeometry(this.projectileRadius, 6, 4);
-        geometry.scale(0.5, 0.5, 5); // X,Y軸を半分にして、Z軸を5倍に伸ばす
+        geometry.scale(0.5, 0.5, 5); // X,Y軸を半分にして、Z軸を5倍に伸ばす（細い形状）
         const material = new THREE.MeshStandardMaterial({
             color: this.projectileColor,
             emissive: this.projectileEmissive,
@@ -105,21 +108,48 @@ class EnemyAttackSystem {
         }
         
         // 各敵の攻撃可能性をチェック
+        let totalEnemies = 0;
+        let activeEnemies = 0;
+        let nonDestroyingEnemies = 0;
+        let availableEnemies = 0;
+        let inRangeEnemies = 0;
+        let spawningEnemies = 0;
+        let nonSpawningEnemies = 0;
+        
         for (let enemy of enemies) {
+            totalEnemies++;
+            
             if (!enemy.userData.active || enemy.userData.isDestroying) {
                 continue;
+            }
+            activeEnemies++;
+            nonDestroyingEnemies++;
+            
+            // スポーン中の敵をカウント
+            if (enemy.userData.isSpawning) {
+                spawningEnemies++;
+            } else {
+                nonSpawningEnemies++;
             }
             
             // 既に攻撃中の敵はスキップ
             if (this.attackingEnemies.has(enemy.userData.id)) {
                 continue;
             }
+            availableEnemies++;
             
             // 攻撃角度チェック
             const canAttack = this.isPlayerInAttackRange(enemy.userData.position, playerPosition);
             if (canAttack) {
                 attackableEnemies.push(enemy);
+                inRangeEnemies++;
             }
+        }
+        
+        // デバッグ情報（5秒に1回出力）
+        if (currentTime - this.lastDebugTime > 5.0) {
+            console.log(`EnemyAttack Debug: Total=${totalEnemies}, Active=${activeEnemies}, Available=${availableEnemies}, InRange=${inRangeEnemies}, Spawning=${spawningEnemies}, NonSpawning=${nonSpawningEnemies}, AttackPhase=${this.isAttackPhase}`);
+            this.lastDebugTime = currentTime;
         }
         
         return attackableEnemies;
@@ -177,6 +207,7 @@ class EnemyAttackSystem {
         
         // 発射位置設定
         projectile.position.copy(enemyPosition);
+        
         
         // 目標方向計算（散らばりを追加）
         const direction = targetPosition.clone().sub(enemyPosition).normalize();
@@ -362,7 +393,7 @@ class EnemyAttackSystem {
         
         if (attacksExecuted > 0) {
             this.lastAttackTime = performance.now() / 1000;
-            debugLog(`敵が攻撃実行: ${attacksExecuted}発`);
+            console.log(`✅ 敵攻撃成功: ${attacksExecuted}発撃発射, 総発射数: ${this.totalShotsFired}`);
         }
         
         return attacksExecuted;

@@ -51,6 +51,13 @@ class BallAttackGame {
         // 敵砲撃システム
         this.enemyAttackSystem = null;
         
+        // 親敵システム
+        this.parentEnemySystem = null;
+        
+        // プレイヤーシステム
+        this.playerHP = 100;
+        this.maxPlayerHP = 100;
+        
         this.init();
     }
     
@@ -63,6 +70,7 @@ class BallAttackGame {
             this.setupControls();
             this.setupWeapons();
             this.setupEnemies();
+            this.setupParentEnemies();
             this.setupEnemyAttack();
             this.setupEventListeners();
             this.setupPerformanceMonitor();
@@ -231,9 +239,23 @@ class BallAttackGame {
         // 敵システムの初期化
         this.enemySystem = new EnemySystem(this.scene, this.earthRadius, this.soundSystem);
         
-        // 敵を配置
-        this.enemySystem.generateEnemies(300);
-        debugLog('敵システムが初期化されました');
+        // ステージ1: 子敵0個で開始（親敵が配置）
+        this.enemySystem.generateEnemies(100);
+        debugLog('敵システムが初期化されました（ステージ1: 子敵0個で開始）');
+    }
+    
+    setupParentEnemies() {
+        // 親敵システムの初期化
+        this.parentEnemySystem = new ParentEnemySystem(this.scene, this.earthRadius);
+        
+        // EnemySystemとの連携を設定
+        if (this.enemySystem) {
+            this.parentEnemySystem.setEnemySystem(this.enemySystem);
+        }
+        
+        // 初期親敵を配置（ステージ1: 1体）
+        this.parentEnemySystem.createParentEnemies(1);
+        debugLog('親敵システムが初期化されました');
     }
     
     setupEnemyAttack() {
@@ -466,13 +488,20 @@ class BallAttackGame {
         this.score = 0;
         this.enemyCount = 0;
         this.level = 1;
+        this.playerHP = this.maxPlayerHP;
         this.updateUI();
         this.controls.reset();
         
         // 敵システムをリセット
         if (this.enemySystem) {
             this.enemySystem.reset();
-            this.enemySystem.generateEnemies(300);
+            this.enemySystem.generateEnemies(100); // ステージ1: 0個で開始
+        }
+        
+        // 親敵システムをリセット
+        if (this.parentEnemySystem) {
+            this.parentEnemySystem.reset();
+            this.parentEnemySystem.createParentEnemies(1);
         }
         
         // 敵砲撃システムをリセット
@@ -494,6 +523,20 @@ class BallAttackGame {
         document.getElementById('score').textContent = this.score;
         document.getElementById('enemyCount').textContent = enemyCount;
         document.getElementById('level').textContent = this.level;
+        document.getElementById('playerHP').textContent = this.playerHP;
+        
+        // 親敵HP表示
+        const parentEnemiesInfo = document.getElementById('parentEnemiesInfo');
+        if (parentEnemiesInfo && this.parentEnemySystem) {
+            const stats = this.parentEnemySystem.getStats();
+            let htmlContent = '';
+            
+            stats.parentEnemies.forEach((parentEnemy, index) => {
+                htmlContent += `<div class="parent-enemy-hp">Parent Enemy ${index + 1} HP: ${parentEnemy.hp}/${parentEnemy.maxHp}</div>`;
+            });
+            
+            parentEnemiesInfo.innerHTML = htmlContent;
+        }
     }
     
     showUI() {
@@ -607,7 +650,7 @@ class BallAttackGame {
     }
     
     checkCollisions() {
-        if (!this.weaponSystem || !this.enemySystem) {
+        if (!this.weaponSystem) {
             return;
         }
         
@@ -617,18 +660,43 @@ class BallAttackGame {
             return;
         }
         
-        // 敵システムで衝突判定
-        const hits = this.enemySystem.checkCollisions(attackSpheres);
+        // 子敵システムで衝突判定
+        if (this.enemySystem) {
+            const hits = this.enemySystem.checkCollisions(attackSpheres);
+            
+            // 衝突があった場合の処理
+            for (let hit of hits) {
+                if (this.enemySystem.destroyEnemy(hit.enemy, hit.damage)) {
+                    // 撃破成功時のスコア加算
+                    this.score += 100;
+                    
+                    // 全敵撃破チェック
+                    if (this.enemySystem.isAllEnemiesDestroyed()) {
+                        this.onGameClear();
+                    }
+                }
+            }
+        }
         
-        // 衝突があった場合の処理
-        for (let hit of hits) {
-            if (this.enemySystem.destroyEnemy(hit.enemy, hit.damage)) {
-                // 撃破成功時のスコア加算
-                this.score += 100;
+        // 親敵システムで衝突判定
+        if (this.parentEnemySystem) {
+            for (const attackSphere of attackSpheres) {
+                const parentHits = this.parentEnemySystem.checkAttack(
+                    attackSphere.position,
+                    attackSphere.radius,
+                    10 // プレイヤー攻撃ダメージ
+                );
                 
-                // 全敵撃破チェック
-                if (this.enemySystem.isAllEnemiesDestroyed()) {
-                    this.onGameClear();
+                // 親敵撃破処理
+                for (const hit of parentHits) {
+                    if (hit.destroyed) {
+                        this.score += 500; // 親敵撃破は高得点
+                        
+                        // 全親敵撃破チェック
+                        if (this.parentEnemySystem.allParentEnemiesDestroyed()) {
+                            this.onStageCleared();
+                        }
+                    }
                 }
             }
         }
@@ -688,6 +756,15 @@ class BallAttackGame {
         // クリア時の処理（将来実装）
     }
     
+    onStageCleared() {
+        debugLog('ステージクリア！全ての親敵を撃破しました');
+        // ステージクリア時の処理（将来実装）
+        // 子敵も壊滅させる
+        if (this.enemySystem) {
+            this.enemySystem.reset();
+        }
+    }
+    
     update(deltaTime) {
         // 人工衛星の軌道制御の更新
         if (this.controls) {
@@ -712,6 +789,11 @@ class BallAttackGame {
         // 敵システムの更新
         if (this.enemySystem) {
             this.enemySystem.update(deltaTime);
+        }
+        
+        // 親敵システムの更新
+        if (this.parentEnemySystem) {
+            this.parentEnemySystem.update(deltaTime);
         }
         
         // 敵砲撃システムの更新

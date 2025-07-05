@@ -243,7 +243,7 @@ class EnemySystem {
         
         // 敵管理
         this.enemies = [];
-        this.maxEnemies = 300;
+        this.maxEnemies = 800; // プール大幅増加
         this.activeEnemyCount = 0;
         
         // 敵の設定
@@ -349,10 +349,23 @@ class EnemySystem {
                     enemy.userData.isDestroying = false;
                     enemy.userData.currentLife = enemy.userData.maxLife;
                     
+                    // IDを追加（敵攻撃システムで必要）
+                    if (!enemy.userData.id) {
+                        enemy.userData.id = `enemy_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                    }
+                    
                     enemy.position.copy(position);
                     enemy.visible = true;
                     enemy.scale.setScalar(1.0);
                     enemy.material.opacity = 1.0;
+                    
+                    // 初期配置敵は即座に攻撃可能状態に設定
+                    enemy.userData.isSpawning = false;
+                    enemy.userData.placedByParent = null; // 初期配置
+                    enemy.material.emissive.setHex(this.enemyEmissiveColor);
+                    enemy.material.emissiveIntensity = 1.0;
+                    
+                    console.log(`Initial Enemy placed: ID=${enemy.userData.id}, active=${enemy.userData.active}, visible=${enemy.visible}`);
                     
                     existingPositions.push(position.clone());
                     this.activeEnemyCount++;
@@ -529,6 +542,10 @@ class EnemySystem {
             if (enemy.userData.isDestroying) {
                 this.updateDestroyAnimation(enemy, deltaTime);
             }
+            // 配置直後の点滅エフェクト更新
+            if (enemy.userData.isSpawning) {
+                this.updateSpawnEffect(enemy);
+            }
         }
         
         // 撃破パーティクルシステムの更新
@@ -538,6 +555,33 @@ class EnemySystem {
         
         // 撃破ライトの更新
         this.updateDestroyLights(deltaTime);
+    }
+    
+    // 配置直後の青色エフェクト更新
+    updateSpawnEffect(enemy) {
+        const now = Date.now();
+        const elapsed = now - enemy.userData.spawnTime;
+        
+        // 3秒経過で青色終了
+        if (elapsed >= enemy.userData.spawnDuration) {
+            enemy.userData.isSpawning = false;
+            // 通常の赤いエミッシブに戻す
+            enemy.material.emissive.setHex(this.enemyEmissiveColor);
+            enemy.material.emissiveIntensity = 1.0;
+            
+            // 敵の状態を確実に設定（攻撃可能にする）
+            enemy.userData.active = true;
+            enemy.userData.isDestroying = false;
+            enemy.visible = true;
+            enemy.material.opacity = 1.0;
+            
+            console.log(`Enemy ${enemy.userData.id}: スポーンエフェクト終了 - 攻撃可能状態に移行`);
+            return;
+        }
+        
+        // 青色で光り続ける（親敵と同じ青色）
+        enemy.material.emissive.setHex(0x0044cc);
+        enemy.material.emissiveIntensity = 0.8;
     }
     
     // 撃破アニメーション更新
@@ -619,6 +663,71 @@ class EnemySystem {
     // アクティブな敵の数を取得
     getActiveEnemyCount() {
         return this.activeEnemyCount;
+    }
+    
+    // 特定位置に子敵を追加（親敵による配置用）
+    addEnemyAtPosition(position, parentId = null) {
+        // 利用可能な敵オブジェクトを探す（非表示の敵を探す）
+        const enemy = this.enemies.find(e => !e.visible);
+        if (!enemy) {
+            // 警告の頻度を下げる（10%の確率で出力）
+            if (Math.random() < 0.1) {
+                console.warn('利用可能な敵オブジェクトがありません');
+            }
+            return null;
+        }
+        
+        // 敵を配置（初期配置と同じ仕様に統一）
+        const latLng = this.cartesianToLatLng(position);
+        enemy.userData.latitude = latLng.lat;
+        enemy.userData.longitude = latLng.lng;
+        enemy.userData.position.copy(position);
+        enemy.userData.active = true;
+        enemy.userData.isDestroying = false;
+        enemy.userData.currentLife = enemy.userData.maxLife;
+        
+        // IDを追加（敵攻撃システムで必要）
+        if (!enemy.userData.id) {
+            enemy.userData.id = `enemy_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        }
+        
+        enemy.position.copy(position);
+        enemy.visible = true;
+        enemy.scale.setScalar(1.0);
+        enemy.material.opacity = 1.0;
+        
+        // 親敵情報を記録（Phase Cで使用）
+        enemy.userData.placedByParent = parentId;
+        enemy.userData.placementTime = Date.now();
+        enemy.userData.hasBeenEnergySource = false;
+        
+        // 配置直後のエフェクト（親敵配置のみ）
+        if (parentId) {
+            enemy.userData.isSpawning = true;
+            enemy.userData.spawnTime = Date.now();
+            enemy.userData.spawnDuration = 3000; // 3秒
+        } else {
+            // 初期配置の敵は通常の赤色
+            enemy.userData.isSpawning = false;
+            enemy.material.emissive.setHex(this.enemyEmissiveColor);
+            enemy.material.emissiveIntensity = 1.0;
+        }
+        
+        this.activeEnemyCount++;
+        this.totalEnemiesSpawned++;
+        
+        // デバッグ出力
+        console.log(`Enemy placed: ID=${enemy.userData.id}, active=${enemy.userData.active}, visible=${enemy.visible}, parent=${parentId || 'initial'}`);
+        
+        return enemy;
+    }
+    
+    // 3D座標から緯度経度に変換
+    cartesianToLatLng(position) {
+        const radius = position.length();
+        const lat = 90 - Math.acos(position.y / radius) * 180 / Math.PI;
+        const lng = Math.atan2(position.z, position.x) * 180 / Math.PI - 180;
+        return { lat, lng };
     }
     
     // 撃破済みの敵数を取得

@@ -56,7 +56,7 @@ class SoundSystem {
         const soundArray = [];
         let index = 1;
         
-        while (index <= 10) { // 最大10個まで検索
+        while (index <= 2) { // 最大2個まで検索（01, 02のみ存在）
             const paddedIndex = index.toString().padStart(2, '0');
             const fileName = `${baseName}${paddedIndex}.wav`;
             const path = `assets/sound/${fileName}`;
@@ -202,6 +202,7 @@ class SoundSystem {
      * 敵攻撃音を再生
      */
     playEnemyAttackSound() {
+        // enemyCannonサウンドを再生
         this.playSound('enemyCannon', this.volumes.enemyCannon);
     }
     
