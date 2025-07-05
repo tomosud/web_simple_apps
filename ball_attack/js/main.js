@@ -33,7 +33,7 @@ class BallAttackGame {
         this.earthTexture = null;
         
         // 人工衛星の設定（画面にフィットする固定距離）
-        this.satelliteOrbitRadius = 2.2;
+        this.satelliteOrbitRadius = this.calculateOptimalDistance();
         this.satellitePosition = new THREE.Vector3(0, 0, this.satelliteOrbitRadius);
         
         // 軌道球（見えない制御用オブジェクト）
@@ -268,6 +268,9 @@ class BallAttackGame {
         
         // 武器パラメータのUI制御
         this.setupWeaponControls();
+        
+        // タッチ操作のUI制御
+        this.setupTouchControls();
     }
     
     setupPhysicsControls() {
@@ -326,6 +329,21 @@ class BallAttackGame {
                     this.weaponSystem.spreadFactor = value;
                 }
                 spreadFactorValue.textContent = value.toFixed(3);
+            });
+        }
+    }
+    
+    setupTouchControls() {
+        const touchSensitivitySlider = document.getElementById('touchSensitivity');
+        const touchSensitivityValue = document.getElementById('touchSensitivityValue');
+        
+        if (touchSensitivitySlider) {
+            touchSensitivitySlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                if (this.controls) {
+                    this.controls.touchSensitivity = value;
+                }
+                touchSensitivityValue.textContent = value.toFixed(1);
             });
         }
     }
@@ -488,6 +506,55 @@ class BallAttackGame {
         const modeIndicator = document.getElementById('modeIndicator');
         if (modeIndicator) {
             modeIndicator.textContent = this.debugMode ? 'デバッグモード' : 'カメラモード';
+        }
+    }
+    
+    calculateOptimalDistance() {
+        // 画面の短い方の辺に地球をフィットさせる
+        const aspectRatio = window.innerWidth / window.innerHeight;
+        const fov = 75 * (Math.PI / 180); // カメラのFOVをラジアンに変換
+        
+        // 短い方の辺を基準にする
+        const minDimension = Math.min(window.innerWidth, window.innerHeight);
+        const maxDimension = Math.max(window.innerWidth, window.innerHeight);
+        
+        // 地球の半径 + マージンを考慮して距離を計算
+        // 短い方の辺の80%に地球が収まるようにする
+        const targetSize = minDimension * 0.8;
+        const distance = (this.earthRadius * 2) / (2 * Math.tan(fov / 2)) * (maxDimension / targetSize);
+        
+        return Math.max(2.0, Math.min(3.5, distance)); // 最小2.0、最大3.5で制限
+    }
+    
+    onWindowResize() {
+        // 画面サイズに応じてレンダラーサイズを更新
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.camera.aspect = window.innerWidth / window.innerHeight;
+        this.camera.updateProjectionMatrix();
+        
+        // 最適な距離を再計算して軌道半径を更新
+        const newDistance = this.calculateOptimalDistance();
+        this.satelliteOrbitRadius = newDistance;
+        this.satellitePosition.set(0, 0, this.satelliteOrbitRadius);
+        
+        // 軌道球システムの半径も更新
+        if (this.controls) {
+            this.controls.orbitRadius = this.satelliteOrbitRadius;
+        }
+        
+        // 軌道球の位置を更新
+        if (this.orbitSphere) {
+            this.orbitSphere.position.set(0, 0, 0);
+        }
+        
+        // 人工衛星の位置を更新
+        if (this.satellite) {
+            this.satellite.position.copy(this.satellitePosition);
+        }
+        
+        // カメラマウントの位置も更新
+        if (this.cameraMount) {
+            this.cameraMount.position.copy(this.satellitePosition);
         }
     }
     

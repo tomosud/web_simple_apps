@@ -177,6 +177,9 @@ class SatelliteOrbitControls {
         this.orbitRadius = orbitRadius;
         this.dragScale = dragScale;
         
+        // タッチ感度設定
+        this.touchSensitivity = 1.0;  // デフォルト値
+        
         // 慣性システム（重い物理挙動）
         this.velocity = { x: 0, y: 0 };
         this.baseFriction = 0.98;      // 基本摩擦
@@ -276,9 +279,10 @@ class SatelliteOrbitControls {
         // 速度に応じて乗算値を調整（スマホでは感度を下げる）
         let speedFactor;
         if (isTouchDevice) {
-            speedFactor = currentSpeed > 0.001 ? 0.1 : 0.05;  // スマホ：動いてる時は0.1、止まってる時は0.05
+            const baseFactor = currentSpeed > 0.001 ? 0.1 : 0.05;  // スマホ：動いてる時は0.1、止まってる時は0.05
+            speedFactor = baseFactor * this.touchSensitivity;        // タッチ感度を適用
         } else {
-            speedFactor = currentSpeed > 0.001 ? 0.2 : 0.1;   // PC：動いてる時は0.2、止まってる時は0.1
+            speedFactor = currentSpeed > 0.001 ? 0.2 : 0.1;         // PC：動いてる時は0.2、止まってる時は0.1
         }
         
         // ドラッグ力を計算
