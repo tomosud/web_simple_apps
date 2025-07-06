@@ -77,8 +77,8 @@ class ParentEnemy {
      * 被弾エフェクト用ライトを作成
      */
     createHitLight() {
-        // 親敵サイズの2倍の範囲を照らす青いポイントライト
-        const lightRange = 0.02 * 5 * 2; // 子敵の5倍 × 2
+        // 親敵サイズの*倍の範囲を照らす青いポイントライト
+        const lightRange = 0.02 * 5 * 4; // 子敵の5倍 × 2
         this.hitLight = new THREE.PointLight(0x0044cc, 0, lightRange, 2);
         this.hitLight.position.copy(this.mesh.position);
         this.scene.add(this.hitLight);
@@ -326,7 +326,7 @@ class ParentEnemySystem {
         this.enemySystem = null; // EnemySystemの参照
         this.childEnemyRadius = 0.01; // 子敵の半径
         this.placementCheckRadius = this.childEnemyRadius * 5; // 配置制約範囲
-        this.placementInterval = 1.0; // 配置間隔（秒）- 頻度を倍に
+        this.placementInterval = 0.3; // 配置間隔（秒）- 頻度を倍に
         this.lastPlacementTime = 0;
         
         // エフェクト用参照
@@ -483,7 +483,7 @@ class ParentEnemySystem {
                 if (this.destroyParticleSystem) {
                     this.destroyParticleSystem.createExplosion(
                         parentEnemy.mesh.position.clone(),
-                        1.5, // スケール
+                        3.0, // スケール
                         0x0044cc // 青色
                     );
                 }

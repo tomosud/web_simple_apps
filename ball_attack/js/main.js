@@ -600,7 +600,7 @@ class BallAttackGame {
         // 短い方の辺に地球2個分（直径4）が収まるように計算
         // 地球の直径 = 2 * earthRadius = 2
         // 目標サイズ = 地球2個分 = 4
-        const targetDiameter = this.earthRadius * 4; // 地球2個分の直径
+        const targetDiameter = this.earthRadius * 3.5; // 地球*個分の半径
         
         // カメラのFOVから必要な距離を計算
         let distance;

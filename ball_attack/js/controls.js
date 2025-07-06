@@ -142,8 +142,8 @@ class GlobeDragCameraControls {
         }
         
         // 微小な速度は停止
-        if (Math.abs(this.velocity.x) < 0.001) this.velocity.x = 0;
-        if (Math.abs(this.velocity.y) < 0.001) this.velocity.y = 0;
+        if (Math.abs(this.velocity.x) < 0.00001) this.velocity.x = 0;
+        if (Math.abs(this.velocity.y) < 0.00001) this.velocity.y = 0;
     }
 
     dispose() {
@@ -309,8 +309,8 @@ class SatelliteOrbitControls {
             this.velocity.y *= 0.7;
             
             // 微小な速度は即座に停止
-            if (Math.abs(this.velocity.x) < 0.01) this.velocity.x = 0;
-            if (Math.abs(this.velocity.y) < 0.01) this.velocity.y = 0;
+            if (Math.abs(this.velocity.x) < 0.001) this.velocity.x = 0;
+            if (Math.abs(this.velocity.y) < 0.001) this.velocity.y = 0;
         }
     }
     
