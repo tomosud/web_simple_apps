@@ -54,9 +54,11 @@ class BallAttackGame {
         // 親敵システム
         this.parentEnemySystem = null;
         
-        // プレイヤーシステム
-        this.playerHP = 100;
-        this.maxPlayerHP = 100;
+        // プレイヤーライフシステム
+        this.playerLifeSystem = null;
+        
+        // ステージシステム
+        this.stageSystem = null;
         
         this.init();
     }
@@ -72,10 +74,15 @@ class BallAttackGame {
             this.setupEnemies();
             this.setupParentEnemies();
             this.setupEnemyAttack();
+            this.setupPlayerLife();
+            this.setupStageSystem();
             this.setupEventListeners();
             this.setupPerformanceMonitor();
             this.hideLoading();
             this.startGame();
+            
+            // アニメーションループを開始
+            this.animate();
         } catch (error) {
             console.error('初期化エラー:', error);
             this.showError('ゲームの初期化に失敗しました。');
@@ -262,6 +269,18 @@ class BallAttackGame {
         // 敵砲撃システムの初期化
         this.enemyAttackSystem = new EnemyAttackSystem(this.scene, this.satellite, this.soundSystem);
         debugLog('敵砲撃システムが初期化されました');
+    }
+    
+    setupPlayerLife() {
+        // プレイヤーライフシステムの初期化
+        this.playerLifeSystem = new PlayerLifeSystem(this);
+        debugLog('プレイヤーライフシステムが初期化されました');
+    }
+    
+    setupStageSystem() {
+        // ステージシステムの初期化
+        this.stageSystem = new StageSystem(this);
+        debugLog('ステージシステムが初期化されました');
     }
     
     setupEventListeners() {
@@ -480,7 +499,6 @@ class BallAttackGame {
     startGame() {
         this.isGameRunning = true;
         this.showUI();
-        this.animate();
         debugLog('ゲームが開始されました');
     }
     
@@ -488,9 +506,18 @@ class BallAttackGame {
         this.score = 0;
         this.enemyCount = 0;
         this.level = 1;
-        this.playerHP = this.maxPlayerHP;
         this.updateUI();
         this.controls.reset();
+        
+        // プレイヤーライフシステムをリセット
+        if (this.playerLifeSystem) {
+            this.playerLifeSystem.reset();
+        }
+        
+        // ステージシステムをリセット
+        if (this.stageSystem) {
+            this.stageSystem.reset();
+        }
         
         // 敵システムをリセット
         if (this.enemySystem) {
@@ -504,15 +531,13 @@ class BallAttackGame {
             this.parentEnemySystem.createParentEnemies(1);
         }
         
-        // 敵砲撃システムをリセット
+        // 敵砲撃システムをリセット（弾丸全削除）
         if (this.enemyAttackSystem) {
             this.enemyAttackSystem.reset();
         }
         
-        // カメラモードの場合、カメラ位置も更新
-        if (!this.debugMode) {
-            this.updateCameraPosition();
-        }
+        // カメラとコントロールを完全にリセット
+        this.resetCameraAndControls();
         debugLog('ゲームがリセットされました');
     }
     
@@ -523,7 +548,6 @@ class BallAttackGame {
         document.getElementById('score').textContent = this.score;
         document.getElementById('enemyCount').textContent = enemyCount;
         document.getElementById('level').textContent = this.level;
-        document.getElementById('playerHP').textContent = this.playerHP;
         
         // 親敵HP表示
         const parentEnemiesInfo = document.getElementById('parentEnemiesInfo');
@@ -583,6 +607,50 @@ class BallAttackGame {
             this.cameraMount.getWorldPosition(this.camera.position);
             this.cameraMount.getWorldQuaternion(this.camera.quaternion);
         }
+    }
+    
+    resetCameraAndControls() {
+        // 軌道球とカメラマウントを完全にリセット
+        if (this.orbitSphere) {
+            this.orbitSphere.rotation.set(0, 0, 0);
+            this.orbitSphere.quaternion.set(0, 0, 0, 1);
+            this.orbitSphere.position.set(0, 0, 0);
+        }
+        
+        // 人工衛星位置もリセット
+        if (this.satellite) {
+            this.satellite.position.set(0, 0, this.satelliteOrbitRadius);
+            this.satellite.rotation.x = Math.PI / 2;
+        }
+        
+        // カメラマウント位置もリセット
+        if (this.cameraMount) {
+            this.cameraMount.position.set(0, 0, this.satelliteOrbitRadius - 0.2);
+            this.cameraMount.rotation.set(0, 0, 0);
+            this.cameraMount.quaternion.set(0, 0, 0, 1);
+        }
+        
+        // コントロールをリセット
+        if (this.controls) {
+            this.controls.reset();
+        }
+        
+        // カメラ位置を強制的にリセット
+        if (this.debugMode) {
+            // デバッグモード: カメラを固定位置に
+            this.camera.position.set(0, 0, 3.5);
+            this.camera.quaternion.set(0, 0, 0, 1);
+            this.satellite.visible = true;
+        } else {
+            // カメラモード: カメラマウント位置に
+            this.satellite.visible = false;
+            this.updateCameraPosition();
+        }
+        
+        // カメラの投影行列も更新
+        this.camera.updateProjectionMatrix();
+        
+        debugLog('カメラとコントロールがリセットされました');
     }
     
     updateModeUI() {
@@ -692,9 +760,9 @@ class BallAttackGame {
                     if (hit.destroyed) {
                         this.score += 500; // 親敵撃破は高得点
                         
-                        // 全親敵撃破チェック
-                        if (this.parentEnemySystem.allParentEnemiesDestroyed()) {
-                            this.onStageCleared();
+                        // 全親敵撃破チェック（ステージクリア）
+                        if (this.stageSystem) {
+                            this.stageSystem.checkStageCleared();
                         }
                     }
                 }
@@ -728,13 +796,17 @@ class BallAttackGame {
             this.enemyAttackSystem.removeProjectile(hitInfo.projectile, projectileIndex);
         }
         
-        // 画面全体赤フラッシュエフェクト
-        this.triggerDamageFlash();
-        
-        // 被弾エフェクト（将来実装）
-        // - カメラシェイク
-        // - ダメージ音
-        // - ライフ減少
+        // プレイヤーライフシステムでダメージ処理
+        if (this.playerLifeSystem) {
+            const gameOver = this.playerLifeSystem.takeDamage(1);
+            if (gameOver) {
+                debugLog('ゲームオーバー - ライフがゼロになりました');
+                // ゲームオーバー処理はPlayerLifeSystemで行われる
+            }
+        } else {
+            // フォールバック: 画面全体赤フラッシュエフェクト
+            this.triggerDamageFlash();
+        }
     }
     
     // 画面全体の赤フラッシュエフェクト
@@ -756,14 +828,6 @@ class BallAttackGame {
         // クリア時の処理（将来実装）
     }
     
-    onStageCleared() {
-        debugLog('ステージクリア！全ての親敵を撃破しました');
-        // ステージクリア時の処理（将来実装）
-        // 子敵も壊滅させる
-        if (this.enemySystem) {
-            this.enemySystem.reset();
-        }
-    }
     
     update(deltaTime) {
         // 人工衛星の軌道制御の更新
@@ -812,6 +876,16 @@ class BallAttackGame {
         // 衝突判定とスコア更新
         this.checkCollisions();
         
+        // プレイヤーライフシステムの更新
+        if (this.playerLifeSystem) {
+            this.playerLifeSystem.update(deltaTime);
+        }
+        
+        // ステージシステムの更新
+        if (this.stageSystem) {
+            this.stageSystem.update(deltaTime);
+        }
+        
         // パフォーマンス監視
         if (this.performanceMonitor) {
             this.performanceMonitor.update();
@@ -822,9 +896,20 @@ class BallAttackGame {
         this.renderer.render(this.scene, this.camera);
     }
     
-    animate(currentTime = 0) {
-        if (!this.isGameRunning) return;
+    updateProjectilesOnly(deltaTime) {
+        // ゲーム停止中でも敵弾丸だけは更新（自然に飛んで消える）
+        if (this.enemyAttackSystem) {
+            // 弾丸の物理更新のみ実行（新しい攻撃は行わない）
+            this.enemyAttackSystem.updateProjectilesOnly(deltaTime);
+        }
         
+        // プレイヤー弾丸も更新
+        if (this.weaponSystem) {
+            this.weaponSystem.update(deltaTime);
+        }
+    }
+    
+    animate(currentTime = 0) {
         // 初回実行時はdeltaTimeを0にする
         let deltaTime = 0;
         if (this.lastTime !== 0) {
@@ -835,7 +920,15 @@ class BallAttackGame {
         // deltaTimeが異常に大きい場合は制限（1/60秒でキャップ）
         deltaTime = Math.min(deltaTime, 1/60);
         
-        this.update(deltaTime);
+        // ゲームが動作中の場合のみupdate処理
+        if (this.isGameRunning) {
+            this.update(deltaTime);
+        } else {
+            // ゲーム停止中でも敵弾丸だけは更新（自然に飛んで消える）
+            this.updateProjectilesOnly(deltaTime);
+        }
+        
+        // レンダリングは常に実行
         this.render();
         
         this.animationId = requestAnimationFrame(this.animate.bind(this));
@@ -861,6 +954,14 @@ class BallAttackGame {
         
         if (this.enemyAttackSystem) {
             this.enemyAttackSystem.dispose();
+        }
+        
+        if (this.playerLifeSystem) {
+            this.playerLifeSystem.dispose();
+        }
+        
+        if (this.stageSystem) {
+            this.stageSystem.dispose();
         }
         
         if (this.renderer) {

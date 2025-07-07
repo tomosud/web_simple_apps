@@ -407,17 +407,24 @@ class SatelliteOrbitControls {
         // 軌道回転をリセット
         this.orbitRotation.set(0, 0, 0, 1);
         this.orbitSphere.quaternion.copy(this.orbitRotation);
+        this.orbitSphere.rotation.set(0, 0, 0);
         
         // 速度もリセット
         this.velocity.x = 0;
         this.velocity.y = 0;
         
         // 半径もリセット
-        this.orbitRadius = 1.3;
+        this.orbitRadius = this.targetRadius;
         this.radiusVelocity = 0;
+        
+        // ドラッグ状態もリセット
+        this._isDown = false;
+        this._hasMoved = false;
         
         // 位置を更新
         this.updateOrbitRadius();
+        
+        console.log('SatelliteOrbitControls reset完了');
     }
     
     dispose() {

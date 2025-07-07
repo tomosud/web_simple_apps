@@ -487,21 +487,90 @@ class EnemyAttackSystem {
     
     // システムリセット
     reset() {
-        // 全弾丸を削除
-        for (let projectile of this.enemyProjectiles) {
-            this.removeProjectile(projectile, 0);
+        // 全弾丸をシーンから削除
+        for (let i = this.enemyProjectiles.length - 1; i >= 0; i--) {
+            const projectile = this.enemyProjectiles[i];
+            if (projectile && projectile.parent) {
+                projectile.parent.remove(projectile);
+            }
         }
         this.enemyProjectiles = [];
+        
+        // プールもクリア
+        for (let poolProjectile of this.projectilePool) {
+            if (poolProjectile && poolProjectile.parent) {
+                poolProjectile.parent.remove(poolProjectile);
+            }
+        }
+        this.projectilePool = [];
         
         // 攻撃状態リセット
         this.attackingEnemies.clear();
         this.lastAttackTime = 0;
+        // 攻撃サイクルを現在時刻から再開
+        this.attackCycleStartTime = performance.now() / 1000;
+        this.isAttackPhase = true;
         
         // 統計リセット
         this.totalShotsFired = 0;
         this.activeProjectileCount = 0;
         
-        debugLog('敵砲撃システムをリセット');
+        console.log('敵砲撃システムをリセット - 弾丸全削除完了');
+    }
+    
+    // 弾丸のみクリア（攻撃システムは維持）
+    clearProjectiles() {
+        // 全弾丸をシーンから削除
+        for (let i = this.enemyProjectiles.length - 1; i >= 0; i--) {
+            const projectile = this.enemyProjectiles[i];
+            if (projectile && projectile.parent) {
+                projectile.parent.remove(projectile);
+            }
+        }
+        this.enemyProjectiles = [];
+        
+        // アクティブな弾丸数をリセット
+        this.activeProjectileCount = 0;
+        
+        // 攻撃サイクルを確実に再開（攻撃フェーズで開始）
+        this.attackCycleStartTime = performance.now() / 1000;
+        this.isAttackPhase = true;
+        
+        console.log('敵弾丸のみクリア完了 - 攻撃システムは継続・攻撃サイクル再開');
+    }
+    
+    // 弾丸の物理更新のみ（新しい攻撃は行わない）
+    updateProjectilesOnly(deltaTime) {
+        const currentTime = performance.now() / 1000;
+        
+        // 既存の弾丸のみ更新
+        for (let i = this.enemyProjectiles.length - 1; i >= 0; i--) {
+            const projectile = this.enemyProjectiles[i];
+            
+            if (!projectile.userData.active) continue;
+            
+            // 弾丸の位置を更新
+            projectile.position.add(
+                projectile.userData.velocity.clone().multiplyScalar(deltaTime)
+            );
+            
+            // 寿命チェック
+            projectile.userData.lifetime += deltaTime;
+            if (projectile.userData.lifetime >= projectile.userData.maxLifetime) {
+                this.removeProjectile(projectile, i);
+                continue;
+            }
+            
+            // 地球との衝突チェック
+            const distanceFromEarth = projectile.position.length();
+            if (distanceFromEarth <= 1.0) {
+                this.removeProjectile(projectile, i);
+                continue;
+            }
+        }
+        
+        // 統計更新
+        this.activeProjectileCount = this.enemyProjectiles.length;
     }
     
     // リソースの解放
