@@ -60,6 +60,11 @@ class BallAttackGame {
         // ステージシステム
         this.stageSystem = null;
         
+        // レティクル制御
+        this.reticleElement = null;
+        this.reticleTimer = 0;
+        this.reticleDisplayDuration = 0.3; // 0.3秒間表示
+        
         this.init();
     }
     
@@ -76,6 +81,7 @@ class BallAttackGame {
             this.setupEnemyAttack();
             this.setupPlayerLife();
             this.setupStageSystem();
+            this.setupReticle();
             this.setupEventListeners();
             this.setupPerformanceMonitor();
             this.hideLoading();
@@ -283,6 +289,12 @@ class BallAttackGame {
         debugLog('ステージシステムが初期化されました');
     }
     
+    setupReticle() {
+        // レティクル要素を取得
+        this.reticleElement = document.getElementById('reticle');
+        debugLog('レティクルシステムが初期化されました');
+    }
+    
     setupEventListeners() {
         // ウィンドウリサイズ
         window.addEventListener('resize', this.onWindowResize.bind(this));
@@ -410,8 +422,8 @@ class BallAttackGame {
                 this.toggleDebugMode();
                 break;
             case 'KeyR':
-                // ゲームリセット
-                this.resetGame();
+                // ゲームリセット（完全リロード）
+                location.reload();
                 break;
             case 'KeyW':
                 // ワイヤーフレーム表示切り替え
@@ -493,7 +505,34 @@ class BallAttackGame {
         if (this.weaponSystem && this.isGameRunning) {
             const currentTime = performance.now() / 1000;
             this.weaponSystem.fire(currentTime);
+            
+            // レティクルを表示
+            this.showReticle();
         }
+    }
+    
+    showReticle() {
+        if (this.reticleElement) {
+            this.reticleElement.classList.add('active');
+            this.reticleTimer = this.reticleDisplayDuration;
+        }
+    }
+    
+    updateReticle(deltaTime) {
+        if (this.reticleTimer > 0) {
+            this.reticleTimer -= deltaTime;
+            
+            if (this.reticleTimer <= 0) {
+                this.hideReticle();
+            }
+        }
+    }
+    
+    hideReticle() {
+        if (this.reticleElement) {
+            this.reticleElement.classList.remove('active');
+        }
+        this.reticleTimer = 0;
     }
     
     startGame() {
@@ -538,6 +577,10 @@ class BallAttackGame {
         
         // カメラとコントロールを完全にリセット
         this.resetCameraAndControls();
+        
+        // レティクルをリセット
+        this.hideReticle();
+        
         debugLog('ゲームがリセットされました');
     }
     
@@ -886,6 +929,9 @@ class BallAttackGame {
             this.stageSystem.update(deltaTime);
         }
         
+        // レティクルの更新
+        this.updateReticle(deltaTime);
+        
         // パフォーマンス監視
         if (this.performanceMonitor) {
             this.performanceMonitor.update();
@@ -907,6 +953,9 @@ class BallAttackGame {
         if (this.weaponSystem) {
             this.weaponSystem.update(deltaTime);
         }
+        
+        // レティクルの更新（ゲーム停止中でも）
+        this.updateReticle(deltaTime);
     }
     
     animate(currentTime = 0) {

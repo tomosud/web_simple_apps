@@ -178,26 +178,8 @@ class PlayerLifeSystem {
     }
     
     onRestart() {
-        // ライフをリセット
-        this.currentLives = this.maxLives;
-        this.isGameOver = false;
-        this.isInvulnerable = false;
-        this.invulnerabilityTimer = 0;
-        
-        // UI更新
-        this.updateHeartsDisplay();
-        
-        // ゲームオーバー画面を非表示
-        if (this.gameOverScreen) {
-            this.gameOverScreen.style.display = 'none';
-        }
-        
-        // ゲームをリセットして再開
-        if (this.gameInstance && this.gameInstance.resetGame) {
-            this.gameInstance.resetGame();
-            // ゲームを確実に再開
-            this.gameInstance.isGameRunning = true;
-        }
+        // 完全なページリロードを実行（最も確実な初期化）
+        location.reload();
     }
     
     update(deltaTime) {

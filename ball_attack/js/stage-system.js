@@ -211,14 +211,8 @@ class StageSystem {
     }
     
     onGameCompleteRestart() {
-        // ゲーム完了画面を非表示
-        this.hideStageClearScreen();
-        
-        // ゲーム全体をリセット
-        if (this.gameInstance && this.gameInstance.resetGame) {
-            this.gameInstance.resetGame();
-            this.gameInstance.isGameRunning = true;
-        }
+        // 完全なページリロードを実行（最も確実な初期化）
+        location.reload();
     }
     
     // 全ての親敵が撃破されたかチェック
