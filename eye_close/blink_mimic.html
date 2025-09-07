@@ -142,10 +142,8 @@
         }
     </style>
     
-    <!-- TensorFlow.js関連のライブラリ -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection"></script>
+    <!-- MediaPipe Tasks Vision関連のライブラリ -->
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3"></script>
 </head>
 <body>
     <div class="container">
@@ -168,14 +166,19 @@
         </div>
     </div>
 
-    <script>
+    <script type="module">
+        import vision from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+        const { FaceLandmarker, FilesetResolver, DrawingUtils } = vision;
+        
         // グローバル変数
-        let detector = null;
+        let faceLandmarker = null;
         let video = null;
         let canvas = null;
         let ctx = null;
         let isDetecting = false;
         let animationId = null;
+        let lastVideoTime = -1;
+        let runningMode = "VIDEO";
         
         // 目の状態
         let currentEyeState = 'white'; // 'white', 'open', 'close'
@@ -189,14 +192,16 @@
         const blinkTimer = document.getElementById('blinkTimer');
         const debugCamera = document.getElementById('debugCamera');
         
-        // 指定されたランドマークインデックス
-        const EYE_LANDMARKS = {
-            left: [33, 160, 158, 133, 153, 144],   // p1, p2, p3, p4, p5, p6
-            right: [362, 385, 387, 263, 373, 380]  // p1, p2, p3, p4, p5, p6
-        };
+        // Blendshape閾値と安定化設定
+        const HYSTERESIS_OPEN = 0.35;   // 開き判定の閾値
+        const HYSTERESIS_CLOSE = 0.65;  // 閉じ判定の閾値
+        const MIN_DURATION_MS = 100;    // 最小継続時間（ミリ秒）
+        const REFRACTORY_MS = 50;       // リフラクトリ期間（ミリ秒）
         
-        // EAR閾値
-        const EAR_THRESHOLD = 0.27;
+        // 状態管理
+        let eyeStateBuffer = [];
+        let lastStateChangeTime = 0;
+        let lastBlinkTime = 0;
         
         // 目の画像パス
         const EYE_IMAGES = {
@@ -223,33 +228,69 @@
             }
         }
         
-        // 瞬き時間を計測
-        function handleBlinkTiming(isClosed) {
+        // Blendshapeから目の開閉を安定判定
+        function processEyeBlinkData(eyeBlinkLeft, eyeBlinkRight) {
             const currentTime = Date.now();
+            const avgBlink = (eyeBlinkLeft + eyeBlinkRight) / 2;
             
-            if (isClosed && !isEyesClosed) {
-                // 目を閉じ始めた
-                isEyesClosed = true;
-                eyeCloseStartTime = currentTime;
-                updateBlinkTimerDisplay('計測中...');
-                
-            } else if (!isClosed && isEyesClosed) {
-                // 目を開けた
-                isEyesClosed = false;
-                if (eyeCloseStartTime) {
-                    const duration = (currentTime - eyeCloseStartTime) / 1000; // 秒に変換
-                    lastBlinkDuration = duration;
-                    updateBlinkTimerDisplay(`${duration.toFixed(2)}秒目を閉じました`);
-                    
-                    // ハイライト効果
-                    blinkTimer.classList.add('highlight');
-                    setTimeout(() => {
-                        blinkTimer.classList.remove('highlight');
-                    }, 2000);
-                    
-                    console.log(`瞬き時間: ${duration.toFixed(2)}秒`);
+            // 時系列バッファに追加
+            eyeStateBuffer.push({ score: avgBlink, time: currentTime });
+            if (eyeStateBuffer.length > 16) {
+                eyeStateBuffer.shift();
+            }
+            
+            // ヒステリシスと継続時間で安定判定
+            let newState = currentEyeState;
+            
+            if (currentEyeState === 'open' && avgBlink > HYSTERESIS_CLOSE) {
+                // 開きから閉じへ
+                if (currentTime - lastStateChangeTime > MIN_DURATION_MS) {
+                    newState = 'close';
                 }
-                eyeCloseStartTime = null;
+            } else if (currentEyeState === 'close' && avgBlink < HYSTERESIS_OPEN) {
+                // 閉じから開きへ
+                if (currentTime - lastStateChangeTime > MIN_DURATION_MS && 
+                    currentTime - lastBlinkTime > REFRACTORY_MS) {
+                    newState = 'open';
+                }
+            } else if (currentEyeState === 'white' && avgBlink < HYSTERESIS_OPEN) {
+                // 初期状態から開きへ
+                newState = 'open';
+            }
+            
+            // 状態変更
+            if (newState !== currentEyeState) {
+                updateEyeState(newState);
+                lastStateChangeTime = currentTime;
+                
+                if (newState === 'close') {
+                    eyeCloseStartTime = currentTime;
+                    updateBlinkTimerDisplay('計測中...');
+                    updateStatus('目を閉じています');
+                } else if (newState === 'open' && currentEyeState === 'close') {
+                    // 瞬き終了
+                    if (eyeCloseStartTime) {
+                        const duration = (currentTime - eyeCloseStartTime) / 1000;
+                        lastBlinkDuration = duration;
+                        updateBlinkTimerDisplay(`${duration.toFixed(2)}秒目を閉じました`);
+                        
+                        // ハイライト効果
+                        blinkTimer.classList.add('highlight');
+                        setTimeout(() => {
+                            blinkTimer.classList.remove('highlight');
+                        }, 2000);
+                        
+                        lastBlinkTime = currentTime;
+                        console.log(`瞬き時間: ${duration.toFixed(2)}秒`);
+                    }
+                    updateStatus('目を開いています');
+                    eyeCloseStartTime = null;
+                }
+            }
+            
+            // デバッグ情報
+            if (window.location.search.includes('debug=true')) {
+                console.log(`Blink: L=${eyeBlinkLeft.toFixed(3)}, R=${eyeBlinkRight.toFixed(3)}, Avg=${avgBlink.toFixed(3)}, State=${currentEyeState}`);
             }
         }
         
@@ -263,41 +304,23 @@
             statusText.textContent = message;
         }
         
-        // 正確なEAR計算
-        function calculateAccurateEAR(landmarks, eyeIndices) {
-            const p1 = landmarks[eyeIndices[0]]; // 左端
-            const p2 = landmarks[eyeIndices[1]]; // 上側1
-            const p3 = landmarks[eyeIndices[2]]; // 上側2  
-            const p4 = landmarks[eyeIndices[3]]; // 右端
-            const p5 = landmarks[eyeIndices[4]]; // 下側1
-            const p6 = landmarks[eyeIndices[5]]; // 下側2
-            
-            if (!p1 || !p2 || !p3 || !p4 || !p5 || !p6) {
-                return 0;
-            }
-            
-            // |p2-p6| の距離を計算
-            const dist_p2_p6 = Math.sqrt(
-                Math.pow(p2.x - p6.x, 2) + Math.pow(p2.y - p6.y, 2)
+        // FaceLandmarkerを作成
+        async function createFaceLandmarker() {
+            const filesetResolver = await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
             );
-            
-            // |p3-p5| の距離を計算
-            const dist_p3_p5 = Math.sqrt(
-                Math.pow(p3.x - p5.x, 2) + Math.pow(p3.y - p5.y, 2)
-            );
-            
-            // |p1-p4| の距離を計算
-            const dist_p1_p4 = Math.sqrt(
-                Math.pow(p1.x - p4.x, 2) + Math.pow(p1.y - p4.y, 2)
-            );
-            
-            // EAR = (|p2-p6| + |p3-p5|) / (2 × |p1-p4|)
-            const ear = (dist_p2_p6 + dist_p3_p5) / (2 * dist_p1_p4);
-            
-            return ear;
+            faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+                baseOptions: {
+                    modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+                    delegate: "GPU"
+                },
+                outputFaceBlendshapes: true,
+                runningMode: runningMode,
+                numFaces: 1
+            });
         }
         
-        // 顔検出とEAR計算
+        // 顔検出とBlendshape処理
         async function detectFaces() {
             if (!isDetecting || !video || video.readyState < 2) {
                 if (isDetecting) {
@@ -307,46 +330,48 @@
             }
             
             try {
-                const estimationConfig = { flipHorizontal: false };
-                const faces = await detector.estimateFaces(video, estimationConfig);
-                
-                // キャンバスをクリア
-                if (ctx) {
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                }
-                
-                if (faces.length > 0) {
-                    const face = faces[0];
-                    const keypoints = face.keypoints;
+                let startTimeMs = performance.now();
+                if (lastVideoTime !== video.currentTime) {
+                    lastVideoTime = video.currentTime;
+                    const results = faceLandmarker.detectForVideo(video, startTimeMs);
                     
-                    // EAR計算
-                    const leftEAR = calculateAccurateEAR(keypoints, EYE_LANDMARKS.left);
-                    const rightEAR = calculateAccurateEAR(keypoints, EYE_LANDMARKS.right);
-                    const avgEAR = (leftEAR + rightEAR) / 2;
-                    
-                    // 目の開閉判定
-                    const isClosed = avgEAR < EAR_THRESHOLD;
-                    
-                    if (isClosed) {
-                        updateEyeState('close');
-                        updateStatus('目を閉じています');
-                    } else {
-                        updateEyeState('open');
-                        updateStatus('目を開いています');
-                    }
-                    
-                    // 瞬き時間を計測
-                    handleBlinkTiming(isClosed);
-                    
-                    // デバッグ用ランドマーク描画
+                    // キャンバスをクリア
                     if (ctx) {
-                        drawEyeLandmarks(keypoints);
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
                     }
                     
-                } else {
-                    // 顔が検出されない場合
-                    updateEyeState('white');
-                    updateStatus('顔を認識中');
+                    if (results.faceBlendshapes && results.faceBlendshapes.length > 0) {
+                        const blendshapes = results.faceBlendshapes[0].categories;
+                        
+                        // eyeBlinkLeftとeyeBlinkRightを取得
+                        const eyeBlinkLeft = blendshapes.find(b => b.categoryName === 'eyeBlinkLeft')?.score || 0;
+                        const eyeBlinkRight = blendshapes.find(b => b.categoryName === 'eyeBlinkRight')?.score || 0;
+                        
+                        // 安定化された目の状態判定
+                        processEyeBlinkData(eyeBlinkLeft, eyeBlinkRight);
+                        
+                        // デバッグ用ランドマーク描画
+                        if (ctx && results.faceLandmarks) {
+                            const drawingUtils = new DrawingUtils(ctx);
+                            for (const landmarks of results.faceLandmarks) {
+                                drawingUtils.drawConnectors(
+                                    landmarks,
+                                    FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE,
+                                    { color: "#FF3030" }
+                                );
+                                drawingUtils.drawConnectors(
+                                    landmarks,
+                                    FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,
+                                    { color: "#30FF30" }
+                                );
+                            }
+                        }
+                        
+                    } else {
+                        // 顔が検出されない場合
+                        updateEyeState('white');
+                        updateStatus('顔を認識中');
+                    }
                 }
                 
             } catch (error) {
@@ -360,57 +385,13 @@
             }
         }
         
-        // デバッグ用ランドマーク描画
-        function drawEyeLandmarks(keypoints) {
-            // 左目を青で描画
-            drawEyeContour(keypoints, EYE_LANDMARKS.left, 'blue');
-            // 右目を赤で描画
-            drawEyeContour(keypoints, EYE_LANDMARKS.right, 'red');
-        }
-        
-        function drawEyeContour(keypoints, indices, color) {
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 1;
-            ctx.fillStyle = color;
-            
-            // ランドマークポイントを描画
-            indices.forEach(index => {
-                const point = keypoints[index];
-                if (point) {
-                    ctx.beginPath();
-                    ctx.arc(point.x, point.y, 2, 0, 2 * Math.PI);
-                    ctx.fill();
-                }
-            });
-            
-            // 目の輪郭を線で結ぶ
-            ctx.beginPath();
-            indices.forEach((index, i) => {
-                const point = keypoints[index];
-                if (point) {
-                    if (i === 0) {
-                        ctx.moveTo(point.x, point.y);
-                    } else {
-                        ctx.lineTo(point.x, point.y);
-                    }
-                }
-            });
-            ctx.closePath();
-            ctx.stroke();
-        }
         
         // モデルセットアップ
         async function setupModel() {
             try {
                 updateStatus('顔検出モデルを読み込み中...');
                 
-                const model = faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh;
-                const detectorConfig = {
-                    runtime: 'mediapipe',
-                    solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh'
-                };
-                
-                detector = await faceLandmarksDetection.createDetector(model, detectorConfig);
+                await createFaceLandmarker();
                 updateStatus('準備完了');
                 updateBlinkTimerDisplay('瞬きを検出中...');
                 
@@ -443,7 +424,15 @@
                 
                 video.srcObject = stream;
                 
-                video.onloadedmetadata = () => {
+                video.onloadeddata = () => {
+                    const radio = video.videoHeight / video.videoWidth;
+                    video.style.width = "200px";
+                    video.style.height = (200 * radio) + "px";
+                    canvas.style.width = "200px";
+                    canvas.style.height = (200 * radio) + "px";
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    
                     video.play();
                     isDetecting = true;
                     detectFaces();

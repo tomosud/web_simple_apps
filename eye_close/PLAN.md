@@ -4,7 +4,7 @@
 
 ## 現状と変更点
 - 不要ファイルを整理し、`blink_mimic.html` + `assets/eye/*` + `run.bat` + ドキュメント（README/PLAN）の最小構成へ縮小。
-- 以後は Blendshape ベースの時系列推定に移行。EARは参考指標に留める。
+- 以後は Blendshape ベースの時系列推定に移行。EARは廃止しBlendshapeのみ使用。
 
 ## 成果物（スコープ）
 - `blink_mimic.html`（Blendshape版）
@@ -57,12 +57,19 @@ eye_close/
 ```
 
 ## 今後のマイルストーン
-- M1: Blendshape版の最小実装（両目の開閉推定・画像スワップ・ログ）
-- M2: ヒステリシス＋最小継続＋リフラクトリ導入で安定化
+- M1: ✅ Blendshape版の最小実装（両目の開閉推定・画像スワップ・ログ）
+- M2: ✅ ヒステリシス＋最小継続＋リフラクトリ導入で安定化
 - M3: デバッグUI・簡易キャリブレーション
 - M4: 軽い検証（モバイル/デスクトップ）と閾値の微調整
 
-## 変更履歴（今回）
+## 変更履歴
+### 2025-09-07: Blendshape版完成
+- ✅ blink_mimic.htmlをMediaPipe Tasks Vision + Blendshapeに書き換え完了
+- ✅ eyeBlinkLeft/Rightを使用した安定した瞬き検出を実装
+- ✅ ヒステリシス、最小継続時間、リフラクトリ期間による時系列安定化を実装
+- ✅ 既存UI（瞬きアニメーション、時間計測）を維持
+
+### 前回
 - 未参照のファイル/サンプルを削除（index.html, blink_detection.html, tensorflow_test.html, css/, js/, samplecode/, simple_test.html）。
 - PLAN.md を Blendshape 方針に全面更新。
 
