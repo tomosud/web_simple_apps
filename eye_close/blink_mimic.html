@@ -89,6 +89,29 @@
             z-index: 1000;
         }
         
+        /* 顔検出できない場合の警告表示 */
+        .no-face-warning {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 87, 51, 0.9);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 20px;
+            font-size: 18px;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(255, 87, 51, 0.3);
+            z-index: 1001;
+            display: none;
+            animation: warningPulse 2s infinite;
+        }
+        
+        @keyframes warningPulse {
+            0%, 100% { opacity: 0.9; }
+            50% { opacity: 0.7; }
+        }
+        
         .debug-camera video {
             width: 100%;
             height: 100%;
@@ -128,6 +151,12 @@
                 font-size: 16px;
                 padding: 12px 25px;
             }
+            
+            .no-face-warning {
+                top: 10px;
+                font-size: 16px;
+                padding: 12px 25px;
+            }
         }
         
         /* アニメーション効果 */
@@ -157,6 +186,11 @@
         
         <div class="blink-timer" id="blinkTimer">
             瞬きを検出中...
+        </div>
+        
+        <!-- 顔検出できない場合の警告 -->
+        <div class="no-face-warning" id="noFaceWarning">
+            📷 カメラに目を写して
         </div>
         
         <!-- デバッグ用カメラ表示（小さく） -->
@@ -191,6 +225,11 @@
         const eyeImage = document.getElementById('eyeImage');
         const blinkTimer = document.getElementById('blinkTimer');
         const debugCamera = document.getElementById('debugCamera');
+        const noFaceWarning = document.getElementById('noFaceWarning');
+        
+        // 顔検出状態管理
+        let noFaceDetectionCount = 0;
+        const NO_FACE_THRESHOLD = 10; // 連続で顔が検出されない回数の閾値
         
         // Blendshape閾値と安定化設定
         const HYSTERESIS_OPEN = 0.35;   // 開き判定の閾値
@@ -369,15 +408,41 @@
                         
                     } else {
                         // 顔が検出されない場合
+                        noFaceDetectionCount++;
                         updateEyeState('white');
                         updateStatus('顔を認識中');
+                        
+                        // 連続で検出されない場合は警告表示
+                        if (noFaceDetectionCount > NO_FACE_THRESHOLD) {
+                            noFaceWarning.style.display = 'block';
+                            // ガイダンス表示時にデバッグカメラを表示
+                            debugCamera.style.display = 'block';
+                        }
+                    }
+                    
+                    // 顔が検出された場合は警告を消す
+                    if (results.faceBlendshapes && results.faceBlendshapes.length > 0) {
+                        noFaceDetectionCount = 0;
+                        noFaceWarning.style.display = 'none';
+                        // デバッグモードでなければカメラを非表示
+                        if (!window.location.search.includes('debug=true')) {
+                            debugCamera.style.display = 'none';
+                        }
                     }
                 }
                 
             } catch (error) {
                 console.error('顔検出エラー:', error);
+                noFaceDetectionCount++;
                 updateEyeState('white');
                 updateStatus('顔を認識中');
+                
+                // エラーの場合も警告表示
+                if (noFaceDetectionCount > NO_FACE_THRESHOLD) {
+                    noFaceWarning.style.display = 'block';
+                    // ガイダンス表示時にデバッグカメラを表示
+                    debugCamera.style.display = 'block';
+                }
             }
             
             if (isDetecting) {
@@ -467,8 +532,12 @@
                 video.srcObject = null;
             }
             
-            // デバッグカメラを非表示
+            // デバッグカメラと警告を非表示
             debugCamera.style.display = 'none';
+            noFaceWarning.style.display = 'none';
+            
+            // 検出カウンターをリセット
+            noFaceDetectionCount = 0;
             
             // 初期状態に戻す
             updateEyeState('white');
