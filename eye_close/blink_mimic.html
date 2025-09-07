@@ -255,12 +255,17 @@
                 currentEyeState = newState;
                 eyeImage.src = EYE_IMAGES[newState];
                 
-                // 瞬きのときにアニメーション効果
+                // ステータステキストも同時に更新
                 if (newState === 'close') {
+                    updateStatus('目を閉じています');
                     eyeImage.classList.add('blink-animation');
                     setTimeout(() => {
                         eyeImage.classList.remove('blink-animation');
                     }, 500);
+                } else if (newState === 'open') {
+                    updateStatus('目を開いています');
+                } else if (newState === 'white') {
+                    updateStatus('顔を認識中');
                 }
                 
                 console.log('目の状態変更:', newState);
@@ -305,7 +310,6 @@
                 if (newState === 'close') {
                     eyeCloseStartTime = currentTime;
                     updateBlinkTimerDisplay('計測中...');
-                    updateStatus('目を閉じています');
                 } else if (newState === 'open' && currentEyeState === 'close') {
                     // 瞬き終了
                     if (eyeCloseStartTime) {
@@ -322,7 +326,6 @@
                         lastBlinkTime = currentTime;
                         console.log(`瞬き時間: ${duration.toFixed(2)}秒`);
                     }
-                    updateStatus('目を開いています');
                     eyeCloseStartTime = null;
                 }
             }
@@ -410,7 +413,6 @@
                         // 顔が検出されない場合
                         noFaceDetectionCount++;
                         updateEyeState('white');
-                        updateStatus('顔を認識中');
                         
                         // 連続で検出されない場合は警告表示
                         if (noFaceDetectionCount > NO_FACE_THRESHOLD) {
@@ -435,7 +437,6 @@
                 console.error('顔検出エラー:', error);
                 noFaceDetectionCount++;
                 updateEyeState('white');
-                updateStatus('顔を認識中');
                 
                 // エラーの場合も警告表示
                 if (noFaceDetectionCount > NO_FACE_THRESHOLD) {
@@ -541,6 +542,7 @@
             
             // 初期状態に戻す
             updateEyeState('white');
+            // 停止時は手動でステータスをオーバーライド
             updateStatus('停止しました');
             updateBlinkTimerDisplay('停止中');
         }
