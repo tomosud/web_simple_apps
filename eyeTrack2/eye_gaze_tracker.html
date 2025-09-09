@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eye Gaze Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            overflow: hidden;
+        }
+        
+        .container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        /* メインキャンバス */
+        #mainCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+        }
+        
+        /* デバッグカメラ */
+        .debug-camera {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 300px;
+            height: 225px;
+            border: 2px solid #fff;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #000;
+            z-index: 1000;
+        }
+        
+        .debug-camera video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+        
+        .debug-camera canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+        }
+        
+        /* ステータス表示 */
+        .status {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 14px;
+            line-height: 1.4;
+            z-index: 1001;
+        }
+        
+        /* 警告表示 */
+        .no-face-warning {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 87, 51, 0.9);
+            color: white;
+            padding: 20px 40px;
+            border-radius: 20px;
+            font-size: 20px;
+            font-weight: bold;
+            z-index: 1002;
+            display: none;
+            animation: warningPulse 2s infinite;
+        }
+        
+        @keyframes warningPulse {
+            0%, 100% { opacity: 0.9; }
+            50% { opacity: 0.7; }
+        }
+        
+        /* 中央の十字線 */
+        .crosshair {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            z-index: 999;
+            transition: all 0.2s ease;
+        }
+        
+        .crosshair:hover {
+            transform: translate(-50%, -50%) scale(1.2);
+        }
+        
+        .crosshair.calibrating {
+            animation: calibrateGlow 1s ease-in-out;
+        }
+        
+        @keyframes calibrateGlow {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(2) drop-shadow(0 0 15px rgba(255, 255, 255, 0.8)); }
+        }
+        
+        .crosshair::before,
+        .crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.7);
+        }
+        
+        .crosshair::before {
+            width: 2px;
+            height: 20px;
+            left: 9px;
+            top: 0;
+        }
+        
+        .crosshair::after {
+            width: 20px;
+            height: 2px;
+            left: 0;
+            top: 9px;
+        }
+        
+        /* モバイル対応 */
+        @media (max-width: 768px) {
+            .debug-camera {
+                width: 200px;
+                height: 150px;
+                top: 10px;
+                right: 10px;
+            }
+            
+            .status {
+                font-size: 12px;
+                padding: 10px;
+            }
+        }
+    </style>
+    
+    <!-- MediaPipe Tasks Vision関連のライブラリ -->
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- メインキャンバス -->
+        <canvas id="mainCanvas"></canvas>
+        
+        <!-- 中央の十字線 -->
+        <div class="crosshair" id="crosshair"></div>
+        
+        <!-- ステータス表示 -->
+        <div class="status" id="status">
+            初期化中...
+        </div>
+        
+        <!-- 顔検出できない場合の警告 -->
+        <div class="no-face-warning" id="noFaceWarning">
+            📷 カメラに顔を写してください
+        </div>
+        
+        <!-- デバッグ用カメラ表示 -->
+        <div class="debug-camera" id="debugCamera">
+            <video id="video" autoplay muted playsinline width="300" height="225"></video>
+            <canvas id="debugCanvas" width="300" height="225"></canvas>
+        </div>
+    </div>
+
+    <script type="module">
+        import vision from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+        const { FaceLandmarker, FilesetResolver, DrawingUtils } = vision;
+        
+        // グローバル変数
+        let faceLandmarker = null;
+        let video = null;
+        let debugCanvas = null;
+        let debugCtx = null;
+        let mainCanvas = null;
+        let mainCtx = null;
+        let isDetecting = false;
+        let animationId = null;
+        let lastVideoTime = -1;
+        let runningMode = "VIDEO";
+        
+        // DOM要素
+        const status = document.getElementById('status');
+        const noFaceWarning = document.getElementById('noFaceWarning');
+        const debugCamera = document.getElementById('debugCamera');
+        const crosshair = document.getElementById('crosshair');
+        
+        // 顔検出状態管理
+        let noFaceDetectionCount = 0;
+        const NO_FACE_THRESHOLD = 10;
+        
+        // 視線追跡データ
+        let currentGazeVector = { x: 0, y: 0 };
+        let screenGazePoint = { x: 0, y: 0 };
+        let calibrationOffset = { x: 0, y: 0 };
+        let isCalibrated = false;
+        
+        // 目のランドマークインデックス
+        const LEFT_EYE_LANDMARKS = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246];
+        const RIGHT_EYE_LANDMARKS = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398];
+        
+        // 更新ステータス
+        function updateStatus(message) {
+            status.textContent = message;
+        }
+        
+        // FaceLandmarkerを作成
+        async function createFaceLandmarker() {
+            const filesetResolver = await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+            );
+            faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+                baseOptions: {
+                    modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+                    delegate: "GPU"
+                },
+                outputFaceBlendshapes: true,
+                outputFaceLandmarks: true,
+                runningMode: runningMode,
+                numFaces: 1
+            });
+        }
+        
+        // 目の中心を計算
+        function getEyeCenter(landmarks, eyeIndices) {
+            let sumX = 0, sumY = 0;
+            for (const index of eyeIndices) {
+                sumX += landmarks[index].x;
+                sumY += landmarks[index].y;
+            }
+            return {
+                x: sumX / eyeIndices.length,
+                y: sumY / eyeIndices.length
+            };
+        }
+        
+        // 視線ベクトルを計算（簡易版）
+        function calculateGazeVector(landmarks, blendshapes) {
+            const leftEyeCenter = getEyeCenter(landmarks, LEFT_EYE_LANDMARKS);
+            const rightEyeCenter = getEyeCenter(landmarks, RIGHT_EYE_LANDMARKS);
+            
+            // 顔の向きを推定（鼻先のランドマークを使用）
+            const noseTip = landmarks[1];
+            const faceCenter = {
+                x: (leftEyeCenter.x + rightEyeCenter.x) / 2,
+                y: (leftEyeCenter.y + rightEyeCenter.y) / 2
+            };
+            
+            // Blendshapeから眼球の動きを取得
+            const eyeLookLeftLeft = blendshapes.find(b => b.categoryName === 'eyeLookOutLeft')?.score || 0;
+            const eyeLookRightRight = blendshapes.find(b => b.categoryName === 'eyeLookInLeft')?.score || 0;
+            const eyeLookUpLeft = blendshapes.find(b => b.categoryName === 'eyeLookUpLeft')?.score || 0;
+            const eyeLookDownLeft = blendshapes.find(b => b.categoryName === 'eyeLookDownLeft')?.score || 0;
+            
+            const eyeLookLeftRight = blendshapes.find(b => b.categoryName === 'eyeLookInRight')?.score || 0;
+            const eyeLookRightLeft = blendshapes.find(b => b.categoryName === 'eyeLookOutRight')?.score || 0;
+            const eyeLookUpRight = blendshapes.find(b => b.categoryName === 'eyeLookUpRight')?.score || 0;
+            const eyeLookDownRight = blendshapes.find(b => b.categoryName === 'eyeLookDownRight')?.score || 0;
+            
+            // 平均的な視線方向を計算
+            const horizontalGaze = ((eyeLookRightRight - eyeLookLeftLeft) + (eyeLookRightLeft - eyeLookLeftRight)) / 2;
+            const verticalGaze = ((eyeLookDownLeft - eyeLookUpLeft) + (eyeLookDownRight - eyeLookUpRight)) / 2;
+            
+            // 顔の向きも考慮
+            const faceHorizontal = (noseTip.x - faceCenter.x) * 2;
+            const faceVertical = (noseTip.y - faceCenter.y) * 2;
+            
+            return {
+                x: horizontalGaze + faceHorizontal,
+                y: verticalGaze + faceVertical
+            };
+        }
+        
+        // スクリーン座標に変換
+        function gazeToScreenCoordinates(gazeVector) {
+            const centerX = mainCanvas.width / 2;
+            const centerY = mainCanvas.height / 2;
+            
+            // 感度調整
+            const sensitivity = 800;
+            
+            // キャリブレーションオフセットを適用
+            const adjustedX = gazeVector.x - calibrationOffset.x;
+            const adjustedY = gazeVector.y - calibrationOffset.y;
+            
+            return {
+                x: centerX + (adjustedX * sensitivity),
+                y: centerY + (adjustedY * sensitivity)
+            };
+        }
+        
+        // メインキャンバスに視線ベクトルを描画
+        function drawGazeVectors() {
+            if (!mainCtx) return;
+            
+            // キャンバスをクリア
+            mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+            
+            const centerX = mainCanvas.width / 2;
+            const centerY = mainCanvas.height / 2;
+            
+            // 両目からの視線ベクトルを描画
+            mainCtx.strokeStyle = '#00ff00';
+            mainCtx.lineWidth = 3;
+            mainCtx.shadowColor = '#00ff00';
+            mainCtx.shadowBlur = 10;
+            
+            // 左目の視線ライン
+            mainCtx.beginPath();
+            mainCtx.moveTo(centerX - 50, centerY);
+            mainCtx.lineTo(screenGazePoint.x - 50, screenGazePoint.y);
+            mainCtx.stroke();
+            
+            // 右目の視線ライン
+            mainCtx.beginPath();
+            mainCtx.moveTo(centerX + 50, centerY);
+            mainCtx.lineTo(screenGazePoint.x + 50, screenGazePoint.y);
+            mainCtx.stroke();
+            
+            // 視線の先にポイントを描画
+            mainCtx.shadowBlur = 20;
+            mainCtx.fillStyle = '#ff0000';
+            mainCtx.beginPath();
+            mainCtx.arc(screenGazePoint.x, screenGazePoint.y, 8, 0, 2 * Math.PI);
+            mainCtx.fill();
+            
+            // 影をリセット
+            mainCtx.shadowBlur = 0;
+            
+            // 視線ベクトルの情報を表示
+            const calibrationStatus = isCalibrated ? " [較正済み]" : " [クリックして較正]";
+            updateStatus(`視線: (${currentGazeVector.x.toFixed(3)}, ${currentGazeVector.y.toFixed(3)}) | スクリーン: (${Math.round(screenGazePoint.x)}, ${Math.round(screenGazePoint.y)})${calibrationStatus}`);
+        }
+        
+        // 顔検出とBlendshape処理
+        async function detectFaces() {
+            if (!isDetecting || !video || video.readyState < 2) {
+                if (isDetecting) {
+                    animationId = requestAnimationFrame(detectFaces);
+                }
+                return;
+            }
+            
+            try {
+                let startTimeMs = performance.now();
+                if (lastVideoTime !== video.currentTime) {
+                    lastVideoTime = video.currentTime;
+                    const results = faceLandmarker.detectForVideo(video, startTimeMs);
+                    
+                    // デバッグキャンバスをクリア
+                    if (debugCtx) {
+                        debugCtx.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
+                    }
+                    
+                    if (results.faceLandmarks && results.faceLandmarks.length > 0 && 
+                        results.faceBlendshapes && results.faceBlendshapes.length > 0) {
+                        
+                        const landmarks = results.faceLandmarks[0];
+                        const blendshapes = results.faceBlendshapes[0].categories;
+                        
+                        // 視線ベクトルを計算
+                        currentGazeVector = calculateGazeVector(landmarks, blendshapes);
+                        screenGazePoint = gazeToScreenCoordinates(currentGazeVector);
+                        
+                        // デバッグ用ランドマーク描画
+                        if (debugCtx) {
+                            const drawingUtils = new DrawingUtils(debugCtx);
+                            
+                            // 目のランドマークを描画
+                            drawingUtils.drawConnectors(
+                                landmarks,
+                                FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,
+                                { color: "#00ff00", lineWidth: 2 }
+                            );
+                            drawingUtils.drawConnectors(
+                                landmarks,
+                                FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE,
+                                { color: "#ff0000", lineWidth: 2 }
+                            );
+                            
+                            // 目の中心点を描画
+                            const leftEyeCenter = getEyeCenter(landmarks, LEFT_EYE_LANDMARKS);
+                            const rightEyeCenter = getEyeCenter(landmarks, RIGHT_EYE_LANDMARKS);
+                            
+                            const leftEyeCenterX = leftEyeCenter.x * debugCanvas.width;
+                            const leftEyeCenterY = leftEyeCenter.y * debugCanvas.height;
+                            const rightEyeCenterX = rightEyeCenter.x * debugCanvas.width;
+                            const rightEyeCenterY = rightEyeCenter.y * debugCanvas.height;
+                            
+                            debugCtx.fillStyle = '#ffff00';
+                            debugCtx.beginPath();
+                            debugCtx.arc(leftEyeCenterX, leftEyeCenterY, 3, 0, 2 * Math.PI);
+                            debugCtx.fill();
+                            
+                            debugCtx.beginPath();
+                            debugCtx.arc(rightEyeCenterX, rightEyeCenterY, 3, 0, 2 * Math.PI);
+                            debugCtx.fill();
+                            
+                            // デバッグビューから視線ラインを描画
+                            debugCtx.strokeStyle = '#00ffff';
+                            debugCtx.lineWidth = 2;
+                            debugCtx.shadowColor = '#00ffff';
+                            debugCtx.shadowBlur = 5;
+                            
+                            // 視線方向ベクトルをデバッグビュー内で計算
+                            const gazeLength = 80;
+                            const leftGazeEndX = leftEyeCenterX + (currentGazeVector.x * gazeLength);
+                            const leftGazeEndY = leftEyeCenterY + (currentGazeVector.y * gazeLength);
+                            const rightGazeEndX = rightEyeCenterX + (currentGazeVector.x * gazeLength);
+                            const rightGazeEndY = rightEyeCenterY + (currentGazeVector.y * gazeLength);
+                            
+                            // 左目からの視線ライン
+                            debugCtx.beginPath();
+                            debugCtx.moveTo(leftEyeCenterX, leftEyeCenterY);
+                            debugCtx.lineTo(leftGazeEndX, leftGazeEndY);
+                            debugCtx.stroke();
+                            
+                            // 右目からの視線ライン
+                            debugCtx.beginPath();
+                            debugCtx.moveTo(rightEyeCenterX, rightEyeCenterY);
+                            debugCtx.lineTo(rightGazeEndX, rightGazeEndY);
+                            debugCtx.stroke();
+                            
+                            // 視線先にポイントを描画
+                            debugCtx.fillStyle = '#ff00ff';
+                            debugCtx.beginPath();
+                            debugCtx.arc(leftGazeEndX, leftGazeEndY, 2, 0, 2 * Math.PI);
+                            debugCtx.fill();
+                            
+                            debugCtx.beginPath();
+                            debugCtx.arc(rightGazeEndX, rightGazeEndY, 2, 0, 2 * Math.PI);
+                            debugCtx.fill();
+                            
+                            debugCtx.shadowBlur = 0;
+                        }
+                        
+                        noFaceDetectionCount = 0;
+                        noFaceWarning.style.display = 'none';
+                        
+                    } else {
+                        // 顔が検出されない場合
+                        noFaceDetectionCount++;
+                        
+                        if (noFaceDetectionCount > NO_FACE_THRESHOLD) {
+                            noFaceWarning.style.display = 'block';
+                        }
+                        
+                        // 視線ベクトルをリセット
+                        currentGazeVector = { x: 0, y: 0 };
+                        screenGazePoint = gazeToScreenCoordinates(currentGazeVector);
+                        updateStatus('顔が検出されません');
+                    }
+                    
+                    // メインキャンバスに描画
+                    drawGazeVectors();
+                }
+                
+            } catch (error) {
+                console.error('顔検出エラー:', error);
+                noFaceDetectionCount++;
+                updateStatus('検出エラー: ' + error.message);
+                
+                if (noFaceDetectionCount > NO_FACE_THRESHOLD) {
+                    noFaceWarning.style.display = 'block';
+                }
+            }
+            
+            if (isDetecting) {
+                animationId = requestAnimationFrame(detectFaces);
+            }
+        }
+        
+        // カメラ開始
+        async function startCamera() {
+            try {
+                updateStatus('カメラ起動中...');
+                
+                video = document.getElementById('video');
+                debugCanvas = document.getElementById('debugCanvas');
+                debugCtx = debugCanvas.getContext('2d');
+                
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { 
+                        width: 640, 
+                        height: 480, 
+                        facingMode: 'user' 
+                    },
+                    audio: false
+                });
+                
+                video.srcObject = stream;
+                
+                video.onloadeddata = () => {
+                    video.play();
+                    isDetecting = true;
+                    detectFaces();
+                    updateStatus('顔検出中...');
+                };
+                
+            } catch (error) {
+                console.error('カメラエラー:', error);
+                updateStatus('カメラアクセスに失敗しました');
+            }
+        }
+        
+        // キャンバスサイズを調整
+        function resizeCanvas() {
+            mainCanvas.width = window.innerWidth;
+            mainCanvas.height = window.innerHeight;
+        }
+        
+        // モデルセットアップ
+        async function setupModel() {
+            try {
+                updateStatus('Face Landmarkerモデルを読み込み中...');
+                
+                await createFaceLandmarker();
+                updateStatus('モデル読み込み完了');
+                
+                // キャンバス初期化
+                mainCanvas = document.getElementById('mainCanvas');
+                mainCtx = mainCanvas.getContext('2d');
+                resizeCanvas();
+                
+                // ウィンドウリサイズ時の処理
+                window.addEventListener('resize', resizeCanvas);
+                
+                // 自動的にカメラを開始
+                startCamera();
+                
+            } catch (error) {
+                console.error('モデル初期化エラー:', error);
+                updateStatus('初期化に失敗しました: ' + error.message);
+            }
+        }
+        
+        // キャリブレーション機能
+        function performCalibration() {
+            if (!currentGazeVector) return;
+            
+            // 現在の視線ベクトルを中央として記録
+            calibrationOffset.x = currentGazeVector.x;
+            calibrationOffset.y = currentGazeVector.y;
+            isCalibrated = true;
+            
+            // アニメーション効果
+            crosshair.classList.add('calibrating');
+            setTimeout(() => {
+                crosshair.classList.remove('calibrating');
+            }, 1000);
+            
+            console.log('キャリブレーション完了:', calibrationOffset);
+        }
+        
+        // クリックイベントを追加
+        crosshair.addEventListener('click', performCalibration);
+        
+        // 初期化
+        setupModel();
+    </script>
+</body>
+</html>
