@@ -224,6 +224,13 @@
             transform: scaleX(-1);
         }
         
+        @media (orientation: portrait) {
+            .debug-camera video {
+                object-fit: contain;
+                object-position: center;
+            }
+        }
+        
         .debug-camera canvas {
             position: absolute;
             top: 0;
@@ -784,6 +791,26 @@
             }
         }
         
+        // カメラの制約を取得（縦横判定）
+        function getVideoConstraints() {
+            const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+            
+            if (isPortrait) {
+                return {
+                    width: { ideal: 720 },
+                    height: { ideal: 1280 },
+                    aspectRatio: { ideal: 9/16 },
+                    facingMode: 'user'
+                };
+            } else {
+                return {
+                    width: 640,
+                    height: 480,
+                    facingMode: 'user'
+                };
+            }
+        }
+        
         // カメラ開始
         async function startCamera() {
             try {
@@ -793,25 +820,25 @@
                 canvas = document.getElementById('canvas');
                 ctx = canvas.getContext('2d');
                 
+                const videoConstraints = getVideoConstraints();
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        width: 640,
-                        height: 480,
-                        facingMode: 'user'
-                    },
+                    video: videoConstraints,
                     audio: false
                 });
                 
                 video.srcObject = stream;
                 
                 video.onloadeddata = () => {
-                    const radio = video.videoHeight / video.videoWidth;
-                    video.style.width = "200px";
-                    video.style.height = (200 * radio) + "px";
-                    canvas.style.width = "200px";
-                    canvas.style.height = (200 * radio) + "px";
+                    // canvas.width/heightを必ず再設定
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
+                    
+                    // 表示サイズは比率で計算
+                    const ratio = video.videoHeight / video.videoWidth;
+                    video.style.width = "200px";
+                    video.style.height = (200 * ratio) + "px";
+                    canvas.style.width = "200px";
+                    canvas.style.height = (200 * ratio) + "px";
                     
                     video.play();
                     isDetecting = true;
@@ -873,6 +900,23 @@
             updateStatus('停止しました');
             updateBlinkTimerDisplay('停止中');
         }
+        
+        // orientationchange時の処理
+        function handleOrientationChange() {
+            // 少し遅延を入れて確実に画面回転を完了させる
+            setTimeout(() => {
+                if (isDetecting) {
+                    console.log('画面回転検出: カメラを再起動します');
+                    stopCamera();
+                    setTimeout(() => {
+                        startCamera();
+                    }, 500); // 500ms後に再起動
+                }
+            }, 100);
+        }
+        
+        // orientationchangeイベントリスナーを追加
+        window.addEventListener('orientationchange', handleOrientationChange);
         
         // 初期化
         setupModel();
