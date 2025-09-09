@@ -363,6 +363,9 @@
         let eyeCloseStartTime = null;
         let lastBlinkDuration = 0;
         let durationUpdateInterval = null;
+        let audioContext = null;
+        let oscillator = null;
+        let gainNode = null;
         
         // DOM要素
         const statusText = document.getElementById('statusText');
@@ -523,9 +526,11 @@
                     eyeCloseStartTime = currentTime;
                     updateBlinkTimerDisplay(''); // 計測中の文字を消す
                     startDurationUpdate(); // リアルタイム更新開始
+                    startContinuousBeep(); // 継続的なビープ音を開始
                 } else if (newState === 'open' && previousState === 'close') {
                     // 瞬き終了
                     stopDurationUpdate(); // リアルタイム更新停止
+                    stopContinuousBeep(); // 継続的なビープ音を停止
                     if (eyeCloseStartTime) {
                         const duration = (currentTime - eyeCloseStartTime) / 1000;
                         lastBlinkDuration = duration;
@@ -584,6 +589,53 @@
             if (durationUpdateInterval) {
                 clearInterval(durationUpdateInterval);
                 durationUpdateInterval = null;
+            }
+        }
+        
+        // 連続的なビープ音を開始
+        function startContinuousBeep() {
+            if (window.location.search.includes('debug=true')) {
+                try {
+                    // 既存の音を停止
+                    stopContinuousBeep();
+                    
+                    // Web Audio APIを使用して連続音を生成
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    oscillator = audioContext.createOscillator();
+                    gainNode = audioContext.createGain();
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
+                    oscillator.frequency.setValueAtTime(800, audioContext.currentTime); // 800Hz
+                    oscillator.type = 'sine'; // サイン波
+                    gainNode.gain.setValueAtTime(0.2, audioContext.currentTime); // 音量を少し下げる
+                    
+                    oscillator.start();
+                } catch (error) {
+                    console.warn('ビープ音の開始に失敗:', error);
+                }
+            }
+        }
+        
+        // 連続的なビープ音を停止
+        function stopContinuousBeep() {
+            try {
+                if (oscillator) {
+                    oscillator.stop();
+                    oscillator.disconnect();
+                    oscillator = null;
+                }
+                if (gainNode) {
+                    gainNode.disconnect();
+                    gainNode = null;
+                }
+                if (audioContext && audioContext.state !== 'closed') {
+                    audioContext.close();
+                    audioContext = null;
+                }
+            } catch (error) {
+                console.warn('ビープ音の停止に失敗:', error);
             }
         }
         
@@ -806,6 +858,7 @@
             
             // 計測中の場合は停止
             stopDurationUpdate();
+            stopContinuousBeep();
             
             // 初期状態に戻す
             updateEyeState('white');
