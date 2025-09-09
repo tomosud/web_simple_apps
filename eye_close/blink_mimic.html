@@ -33,12 +33,44 @@
             align-items: center;
             width: 100%;
             margin-bottom: 50px;
+            position: relative;
+        }
+        
+        .eye-wrapper {
+            position: relative;
+            max-width: 80%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .eye-part {
+            width: 50%;
+            height: auto;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .eye-part img {
+            width: 200%;
+            height: auto;
+            transition: all 0.3s ease;
+            object-fit: cover;
+        }
+        
+        .eye-left img {
+            object-position: 0% center;
+        }
+        
+        .eye-right img {
+            object-position: 100% center;
         }
         
         #eyeImage {
             max-width: 80%;
             height: auto;
             transition: all 0.3s ease;
+            display: none;
         }
         
         .status-text {
@@ -70,6 +102,10 @@
             transition: all 0.3s ease;
         }
         
+        .blink-timer.hidden {
+            display: none;
+        }
+        
         .blink-timer.highlight {
             background: rgba(255, 215, 0, 0.9);
             transform: translateX(-50%) scale(1.1);
@@ -87,6 +123,75 @@
             overflow: hidden;
             opacity: 0.8;
             z-index: 1000;
+        }
+        
+        /* デバッグ情報表示 */
+        .debug-info {
+            position: fixed;
+            bottom: 120px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            font-family: monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            z-index: 1000;
+            display: none;
+            width: 300px;
+        }
+        
+        .debug-graph {
+            margin-top: 10px;
+        }
+        
+        .graph-label {
+            font-size: 11px;
+            margin-bottom: 5px;
+            color: #ccc;
+        }
+        
+        .graph-container {
+            width: 100%;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            position: relative;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+        
+        .graph-bar {
+            height: 100%;
+            transition: all 0.1s ease;
+            border-radius: 5px;
+            position: relative;
+        }
+        
+        .graph-bar.open {
+            background: linear-gradient(90deg, #00ff00, #88ff88);
+        }
+        
+        .graph-bar.closed {
+            background: linear-gradient(90deg, #ff0000, #ff8888);
+        }
+        
+        .threshold-line {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            width: 2px;
+            background: #ffff00;
+            z-index: 1;
+        }
+        
+        .threshold-line.open-threshold {
+            left: 35%; /* 0.35の位置 */
+        }
+        
+        .threshold-line.close-threshold {
+            left: 65%; /* 0.65の位置 */
         }
         
         /* 顔検出できない場合の警告表示 */
@@ -181,6 +286,14 @@
         </div>
         
         <div class="eye-container">
+            <div class="eye-wrapper" id="eyeWrapper">
+                <div class="eye-part eye-left">
+                    <img id="eyeLeftImage" src="assets/eye/eye_white.png" alt="左目の状態">
+                </div>
+                <div class="eye-part eye-right">
+                    <img id="eyeRightImage" src="assets/eye/eye_white.png" alt="右目の状態">
+                </div>
+            </div>
             <img id="eyeImage" src="assets/eye/eye_white.png" alt="目の状態">
         </div>
         
@@ -197,6 +310,34 @@
         <div class="debug-camera" id="debugCamera" style="display: none;">
             <video id="video" autoplay muted playsinline width="200" height="150"></video>
             <canvas id="canvas" width="200" height="150"></canvas>
+        </div>
+        
+        <!-- デバッグ情報表示 -->
+        <div class="debug-info" id="debugInfo">
+            <div>閾値: 開 &lt; 0.35 &lt; 判定ゾーン &lt; 0.65 &lt; 閉</div>
+            
+            <div class="debug-graph">
+                <div class="graph-label">左目: <span id="leftEyeValue">0.000</span></div>
+                <div class="graph-container">
+                    <div class="threshold-line open-threshold"></div>
+                    <div class="threshold-line close-threshold"></div>
+                    <div class="graph-bar" id="leftEyeBar"></div>
+                </div>
+            </div>
+            
+            <div class="debug-graph">
+                <div class="graph-label">右目: <span id="rightEyeValue">0.000</span></div>
+                <div class="graph-container">
+                    <div class="threshold-line open-threshold"></div>
+                    <div class="threshold-line close-threshold"></div>
+                    <div class="graph-bar" id="rightEyeBar"></div>
+                </div>
+            </div>
+            
+            <div>平均: <span id="avgEyeValue">0.000</span></div>
+            <div>状態: <span id="eyeStateDebug">白</span></div>
+            <div>計測時間: <span id="blinkDuration">0.00</span>秒</div>
+            <div>前回: <span id="lastBlinkTime">--</span>秒</div>
         </div>
     </div>
 
@@ -216,16 +357,30 @@
         
         // 目の状態
         let currentEyeState = 'white'; // 'white', 'open', 'close'
+        let leftEyeState = 'white';
+        let rightEyeState = 'white';
         let isEyesClosed = false;
         let eyeCloseStartTime = null;
         let lastBlinkDuration = 0;
+        let durationUpdateInterval = null;
         
         // DOM要素
         const statusText = document.getElementById('statusText');
         const eyeImage = document.getElementById('eyeImage');
+        const eyeLeftImage = document.getElementById('eyeLeftImage');
+        const eyeRightImage = document.getElementById('eyeRightImage');
         const blinkTimer = document.getElementById('blinkTimer');
         const debugCamera = document.getElementById('debugCamera');
         const noFaceWarning = document.getElementById('noFaceWarning');
+        const debugInfo = document.getElementById('debugInfo');
+        const leftEyeValue = document.getElementById('leftEyeValue');
+        const rightEyeValue = document.getElementById('rightEyeValue');
+        const avgEyeValue = document.getElementById('avgEyeValue');
+        const eyeStateDebug = document.getElementById('eyeStateDebug');
+        const leftEyeBar = document.getElementById('leftEyeBar');
+        const rightEyeBar = document.getElementById('rightEyeBar');
+        const blinkDuration = document.getElementById('blinkDuration');
+        const lastBlinkTimeElement = document.getElementById('lastBlinkTime');
         
         // 顔検出状態管理
         let noFaceDetectionCount = 0;
@@ -240,7 +395,7 @@
         // 状態管理
         let eyeStateBuffer = [];
         let lastStateChangeTime = 0;
-        let lastBlinkTime = 0;
+        let lastBlinkTimestamp = 0;
         
         // 目の画像パス
         const EYE_IMAGES = {
@@ -249,18 +404,30 @@
             close: 'assets/eye/eye_close.png'
         };
         
-        // 目の状態を更新
+        // 個別の目の状態を更新
+        function updateIndividualEyeState(eye, newState) {
+            if (eye === 'left' && leftEyeState !== newState) {
+                leftEyeState = newState;
+                eyeLeftImage.src = EYE_IMAGES[newState];
+            } else if (eye === 'right' && rightEyeState !== newState) {
+                rightEyeState = newState;
+                eyeRightImage.src = EYE_IMAGES[newState];
+            }
+        }
+        
+        // 全体の目の状態を更新
         function updateEyeState(newState) {
             if (currentEyeState !== newState) {
                 currentEyeState = newState;
-                eyeImage.src = EYE_IMAGES[newState];
                 
                 // ステータステキストも同時に更新
                 if (newState === 'close') {
-                    updateStatus('目を閉じています');
-                    eyeImage.classList.add('blink-animation');
+                    updateStatus('両目を閉じています');
+                    eyeLeftImage.classList.add('blink-animation');
+                    eyeRightImage.classList.add('blink-animation');
                     setTimeout(() => {
-                        eyeImage.classList.remove('blink-animation');
+                        eyeLeftImage.classList.remove('blink-animation');
+                        eyeRightImage.classList.remove('blink-animation');
                     }, 500);
                 } else if (newState === 'open') {
                     updateStatus('目を開いています');
@@ -268,7 +435,38 @@
                     updateStatus('顔を認識中');
                 }
                 
+                // デバッグ表示更新
+                eyeStateDebug.textContent = newState === 'white' ? '白' : 
+                                          newState === 'open' ? '開' : '閉';
+                
                 console.log('目の状態変更:', newState);
+            }
+        }
+        
+        // デバッググラフを更新
+        function updateDebugGraph(eyeBlinkLeft, eyeBlinkRight) {
+            // 数値表示を更新
+            leftEyeValue.textContent = eyeBlinkLeft.toFixed(3);
+            rightEyeValue.textContent = eyeBlinkRight.toFixed(3);
+            
+            // グラフバーを更新
+            const leftWidth = Math.min(eyeBlinkLeft * 100, 100);
+            const rightWidth = Math.min(eyeBlinkRight * 100, 100);
+            
+            leftEyeBar.style.width = leftWidth + '%';
+            rightEyeBar.style.width = rightWidth + '%';
+            
+            // 色を判定に基づいて変更
+            if (eyeBlinkLeft > HYSTERESIS_CLOSE) {
+                leftEyeBar.className = 'graph-bar closed';
+            } else {
+                leftEyeBar.className = 'graph-bar open';
+            }
+            
+            if (eyeBlinkRight > HYSTERESIS_CLOSE) {
+                rightEyeBar.className = 'graph-bar closed';
+            } else {
+                rightEyeBar.className = 'graph-bar open';
             }
         }
         
@@ -277,45 +475,65 @@
             const currentTime = Date.now();
             const avgBlink = (eyeBlinkLeft + eyeBlinkRight) / 2;
             
+            // デバッグ情報を更新
+            updateDebugGraph(eyeBlinkLeft, eyeBlinkRight);
+            avgEyeValue.textContent = avgBlink.toFixed(3);
+            
+            // 個別の目の状態を判定
+            const leftClosed = eyeBlinkLeft > HYSTERESIS_CLOSE;
+            const rightClosed = eyeBlinkRight > HYSTERESIS_CLOSE;
+            
+            // 個別の目の状態を更新
+            updateIndividualEyeState('left', leftClosed ? 'close' : 'open');
+            updateIndividualEyeState('right', rightClosed ? 'close' : 'open');
+            
             // 時系列バッファに追加
             eyeStateBuffer.push({ score: avgBlink, time: currentTime });
             if (eyeStateBuffer.length > 16) {
                 eyeStateBuffer.shift();
             }
             
-            // ヒステリシスと継続時間で安定判定
+            // 両目が閉じている場合のみ全体を閉じ状態にする
             let newState = currentEyeState;
+            const bothEyesClosed = leftClosed && rightClosed;
             
-            if (currentEyeState === 'open' && avgBlink > HYSTERESIS_CLOSE) {
-                // 開きから閉じへ
+            if (currentEyeState === 'open' && bothEyesClosed) {
+                // 開きから閉じへ（両目が閉じている場合のみ）
                 if (currentTime - lastStateChangeTime > MIN_DURATION_MS) {
                     newState = 'close';
                 }
-            } else if (currentEyeState === 'close' && avgBlink < HYSTERESIS_OPEN) {
-                // 閉じから開きへ
+            } else if (currentEyeState === 'close' && !bothEyesClosed) {
+                // 閉じから開きへ（どちらかの目が開いた場合）
                 if (currentTime - lastStateChangeTime > MIN_DURATION_MS && 
-                    currentTime - lastBlinkTime > REFRACTORY_MS) {
+                    currentTime - lastBlinkTimestamp > REFRACTORY_MS) {
                     newState = 'open';
                 }
-            } else if (currentEyeState === 'white' && avgBlink < HYSTERESIS_OPEN) {
+            } else if (currentEyeState === 'white' && !bothEyesClosed) {
                 // 初期状態から開きへ
                 newState = 'open';
             }
             
             // 状態変更
             if (newState !== currentEyeState) {
+                const previousState = currentEyeState;
                 updateEyeState(newState);
                 lastStateChangeTime = currentTime;
                 
                 if (newState === 'close') {
                     eyeCloseStartTime = currentTime;
-                    updateBlinkTimerDisplay('計測中...');
-                } else if (newState === 'open' && currentEyeState === 'close') {
+                    updateBlinkTimerDisplay(''); // 計測中の文字を消す
+                    startDurationUpdate(); // リアルタイム更新開始
+                } else if (newState === 'open' && previousState === 'close') {
                     // 瞬き終了
+                    stopDurationUpdate(); // リアルタイム更新停止
                     if (eyeCloseStartTime) {
                         const duration = (currentTime - eyeCloseStartTime) / 1000;
                         lastBlinkDuration = duration;
                         updateBlinkTimerDisplay(`${duration.toFixed(2)}秒目を閉じました`);
+                        
+                        // デバッグ表示も最終値で更新
+                        blinkDuration.textContent = duration.toFixed(2);
+                        lastBlinkTimeElement.textContent = duration.toFixed(2);
                         
                         // ハイライト効果
                         blinkTimer.classList.add('highlight');
@@ -323,7 +541,7 @@
                             blinkTimer.classList.remove('highlight');
                         }, 2000);
                         
-                        lastBlinkTime = currentTime;
+                        lastBlinkTimestamp = currentTime;
                         console.log(`瞬き時間: ${duration.toFixed(2)}秒`);
                     }
                     eyeCloseStartTime = null;
@@ -332,13 +550,41 @@
             
             // デバッグ情報
             if (window.location.search.includes('debug=true')) {
-                console.log(`Blink: L=${eyeBlinkLeft.toFixed(3)}, R=${eyeBlinkRight.toFixed(3)}, Avg=${avgBlink.toFixed(3)}, State=${currentEyeState}`);
+                console.log(`Blink: L=${eyeBlinkLeft.toFixed(3)}, R=${eyeBlinkRight.toFixed(3)}, Avg=${avgBlink.toFixed(3)}, State=${currentEyeState}, Both=${bothEyesClosed}`);
             }
         }
         
         // 瞬きタイマーの表示を更新
         function updateBlinkTimerDisplay(message) {
-            blinkTimer.textContent = message;
+            if (message === '') {
+                // 空文字の場合は要素を非表示にする
+                blinkTimer.classList.add('hidden');
+            } else {
+                blinkTimer.classList.remove('hidden');
+                blinkTimer.textContent = message;
+            }
+        }
+        
+        // 計測中の時間をリアルタイムで更新
+        function startDurationUpdate() {
+            if (durationUpdateInterval) {
+                clearInterval(durationUpdateInterval);
+            }
+            
+            durationUpdateInterval = setInterval(() => {
+                if (eyeCloseStartTime && currentEyeState === 'close') {
+                    const currentDuration = (Date.now() - eyeCloseStartTime) / 1000;
+                    blinkDuration.textContent = currentDuration.toFixed(2);
+                }
+            }, 50); // 50msごとに更新
+        }
+        
+        // 計測停止
+        function stopDurationUpdate() {
+            if (durationUpdateInterval) {
+                clearInterval(durationUpdateInterval);
+                durationUpdateInterval = null;
+            }
         }
         
         // ステータステキストを更新
@@ -413,6 +659,22 @@
                         // 顔が検出されない場合
                         noFaceDetectionCount++;
                         updateEyeState('white');
+                        updateIndividualEyeState('left', 'white');
+                        updateIndividualEyeState('right', 'white');
+                        
+                        // デバッグ情報をリセット
+                        leftEyeValue.textContent = '0.000';
+                        rightEyeValue.textContent = '0.000';
+                        avgEyeValue.textContent = '0.000';
+                        
+                        // グラフバーをリセット
+                        leftEyeBar.style.width = '0%';
+                        rightEyeBar.style.width = '0%';
+                        leftEyeBar.className = 'graph-bar open';
+                        rightEyeBar.className = 'graph-bar open';
+                        
+                        // 計測時間をリセット
+                        blinkDuration.textContent = '0.00';
                         
                         // 連続で検出されない場合は警告表示
                         if (noFaceDetectionCount > NO_FACE_THRESHOLD) {
@@ -506,6 +768,7 @@
                     // デバッグカメラを表示（開発時のみ）
                     if (window.location.search.includes('debug=true')) {
                         debugCamera.style.display = 'block';
+                        debugInfo.style.display = 'block';
                     }
                     
                     updateStatus('顔を認識中');
@@ -535,13 +798,24 @@
             
             // デバッグカメラと警告を非表示
             debugCamera.style.display = 'none';
+            debugInfo.style.display = 'none';
             noFaceWarning.style.display = 'none';
             
             // 検出カウンターをリセット
             noFaceDetectionCount = 0;
             
+            // 計測中の場合は停止
+            stopDurationUpdate();
+            
             // 初期状態に戻す
             updateEyeState('white');
+            updateIndividualEyeState('left', 'white');
+            updateIndividualEyeState('right', 'white');
+            
+            // デバッグ表示をリセット
+            blinkDuration.textContent = '0.00';
+            lastBlinkTimeElement.textContent = '--';
+            
             // 停止時は手動でステータスをオーバーライド
             updateStatus('停止しました');
             updateBlinkTimerDisplay('停止中');
