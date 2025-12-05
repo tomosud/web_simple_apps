@@ -1,15 +1,6 @@
 # Web Simple Apps
 
-スマートフォンの加速度センサーを使ったシンプルなWebアプリケーション集
-
-## 開発ルール
-各ゲームのフォルダ以下で実装し、コーディングするAIは他フォルダを更新しないこと。
-ただしこの文書は例外とする。
-Github pageに静的にhostできる技術で作成する事。
-スマホでの実行を可能とすること
-関数のファイルは約４００行までを限度とし、それ以上になりそうな場合は計画的にファイルを分割する事。
-
-各ゲームのフォルダ以下にREADME.mdを作成し、仕様と実装計画を最新にしながら実装する事。
+スマートフォンの加速度センサーなどを使ったシンプルなWebアプリケーション集
 
 
 ## アプリ一覧
@@ -19,69 +10,52 @@ Github pageに静的にhostできる技術で作成する事。
 https://tomosud.github.io/web_simple_apps/card_game.html
 
 3Dメンコゲーム
-- 加速度センサーでカードを投げる
-- 床に散らばった50枚のカードを飛ばす
-- 投げ速度とカードの角度で飛び散る範囲が変化
-- 全カード飛ばしでPerfect演出
-- 角度センサーによる視差効果
+- 下に向かってスマホを振って、カードを投げる。
+- 床に散らばったカードを飛ばす
+- 投げ速度とカードの角度で飛び散る枚数が変わる
+- 全カード（50枚）飛ばしでPerfect　（未踏）
   
 https://github.com/user-attachments/assets/b9c0ff08-c6f7-43f6-9789-6f00b819b6f2
+
+### テトリス（テトリスじゃない）
+
+
+テトリスじゃない、テトリスのゲームを作りました。
+テトリスでもスリトテでもいいので、文字をくっつけたらステージクリア。
+
+https://tomosud.github.io/pyxe2d/tetgame/
+
+<img width="678" height="932" alt="image" src="https://github.com/user-attachments/assets/e10c6afa-c1c3-4fae-af38-262a6a9426d3" />
+
+### 音ゲ（エモい）
+
+東京での一人暮らしをテーマにしたエモい音ゲ
+
+https://tomosud.github.io/web_simple_apps/otoge/
+
+<img width="708" height="817" alt="image" src="https://github.com/user-attachments/assets/8d6c266b-4e41-4771-a75f-56205df16fdf" />
+
+
+### ミャクミャク様ビュワー
+
+AIで作ったミャクミャク様とビュワーで見放題。
+
+https://tomosud.github.io/myaku_glb/
+
+<img width="620" height="656" alt="image" src="https://github.com/user-attachments/assets/3fec4297-0dd0-4d18-8215-3220ea227a81" />
+
 
 ### 16tea/tea_game.html
 
 https://tomosud.github.io/web_simple_apps/16tea/tea_game.html
 
 16茶ゲーム（ブラックジャック風）
-- 素材を混ぜて合計16の「16茶」を作るゲーム
-- 数字が表示された素材と隠された「？」素材
-- 同じ数値の素材は同じ色でヒント表示
-- 16ちょうどを目指す戦略的なお茶作り
-- ブラックジャックのルールをベースにした新感覚ゲーム
 
-### eyeTrack/eyeTrack.html
+- １茶から4茶の組み合わせで16ちょうどを目指してください
+- つまらないです
 
-視線追跡デモアプリケーション
-- WebGazer.jsを使用した高精度な視線追跡
-- 5点キャリブレーション（四隅+中央）で校正
-- カメラ映像を左上に表示（PC・スマホ対応）
-- 両目の位置から視線位置まで2本のライン描画
-- カメラ画像上と全画面の両方にライン表示
-- リアルタイム視線位置追跡とスムージング処理
-- レスポンシブデザインでモバイル端末にも対応
+<img width="637" height="860" alt="image" src="https://github.com/user-attachments/assets/a44d90cb-14cd-40ae-91d4-b948c6c293e2" />
 
-## 使用技術
-- HTML5
-- CSS3
-- JavaScript
-- Three.js (3Dグラフィックス)
-- WebGazer.js (視線追跡ライブラリ)
-- Device Motion API (加速度センサー)
-- Device Orientation API (角度センサー)
-- WebRTC API (カメラアクセス)
 
-## 対応デバイス
-- iOS Safari (許可要求あり)
-- Android Chrome
-- デスクトップブラウザ (視線追跡アプリのみ)
-- その他モバイルブラウザ
 
-## 使い方
-
-### 加速度センサー系アプリ
-1. スマートフォンでHTMLファイルを開く
-2. センサー許可を与える
-3. デバイスを動かしてゲームを楽しむ
-
-### 視線追跡アプリ (eyeTrack)
-1. PC・スマホのブラウザでHTMLファイルを開く
-2. カメラアクセス許可を与える
-3. 「視線追跡を開始」ボタンをクリック
-4. 5点キャリブレーション（赤い点を順番にクリック）
-5. 視線追跡開始（両目から視線位置まで2本のライン表示）
-
-## 注意事項
-- HTTPSが必要な場合があります
-- センサー・カメラアクセス許可が必要です
-- 加速度センサー系はデスクトップでは動作しません
-- 視線追跡は明るい環境で顔がカメラに写る状態で使用してください
 
