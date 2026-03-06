@@ -85,3 +85,7 @@
 7. **ストリーク**: 連勝で「🔥2連勝」表示、失敗でリセット
 8. **称号/ハイスコア**: localStorage保存・表示とも正常
 9. **モバイルUI**: 1カラム縦レイアウト、大きなボタン、スクロール不要
+
+### 修正したバグ
+1. **レイヤー描画**: `.tea-layers` を flex → absolute positioning 方式に変更。各レイヤーを `bottom` と `height` の%で配置
+2. **モバイルレイアウト**: ボトル `max-height` を 340px→200px に縮小、各要素のpadding/marginを圧縮し、`.main` を `justify-content: flex-end` にしてボタンとの隙間を解消。375x812 viewport で全要素が1画面に収まることを確認

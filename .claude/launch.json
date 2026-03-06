@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "16tea",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npx-cli.js", "http-server", "16tea", "-p", "8165", "-c-1"],
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "npx http-server 16tea -p 8165 -c-1"],
       "port": 8165
     }
   ]
