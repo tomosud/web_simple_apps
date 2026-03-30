@@ -74,12 +74,28 @@ const SCORE_PER_ENEMY = 100;
 const SPEED_BOOST_PER_KILL = 0.25;
 const SPEED_DECAY_RATE = 0.3;
 const MAX_SPEED_MULT = 4.0;
+const AIRBORNE_ACCEL = 0.4;
+const KNOCKBACK_SPEED = 250;
+const RELATIVE_SPEED_KILL = 200;
+const GRAVITY_PULL = 60;
+const GRAVITY_PULL_RANGE = 150;
+const ENEMY_WALL_BOUNCE = 50;
+const ENEMY_TRAIL_LENGTH = 5;
 
 // 軌跡
 const TRAIL_BASE_LENGTH = 15;
 const TRAIL_LENGTH_PER_SPEED = 25;
 const TRAIL_RECORD_INTERVAL = 0.012;
 const TRAIL_BASE_WIDTH = 3;
+
+// 破片
+const FRAGMENT_COUNT = 3;
+const FRAGMENT_RADIUS = 3;
+const FRAGMENT_SPEED = 350;
+
+// 消滅パーティクル
+const PARTICLE_COUNT = 6;
+const PARTICLE_LIFE = 0.4;
 
 // ============================================================
 // Three.js セットアップ
@@ -166,99 +182,134 @@ function spawnEnemies() {
     enemies.push(mesh);
     const angle = Math.random() * Math.PI * 2;
     const speed = ENEMY_SPEED_MIN + Math.random() * (ENEMY_SPEED_MAX - ENEMY_SPEED_MIN);
-    enemyData.push({ vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed });
+
+    // 軌跡用 Line を事前作成（毎フレーム座標更新のみ）
+    const trailPosArr = new Float32Array(ENEMY_TRAIL_LENGTH * 3);
+    const trailGeo = new THREE.BufferGeometry();
+    const trailPosAttrE = new THREE.Float32BufferAttribute(trailPosArr, 3);
+    trailPosAttrE.setUsage(THREE.DynamicDrawUsage);
+    trailGeo.setAttribute('position', trailPosAttrE);
+    trailGeo.setDrawRange(0, 0);
+    const trailMat = new THREE.LineBasicMaterial({ color: mat.color.clone(), transparent: true, opacity: 0.4 });
+    const trailLine = new THREE.Line(trailGeo, trailMat);
+    trailLine.frustumCulled = false;
+    scene.add(trailLine);
+
+    enemyData.push({
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      trail: [],
+      trailLine,
+      trailPosAttr: trailPosAttrE
+    });
   }
   updateHud();
 }
 
 // ============================================================
-// プレイヤー軌跡（滑らかな尻尾）
+// プレイヤー軌跡（滑らかな尻尾）— 事前確保バッファで高速更新
 // ============================================================
 const trailHistory = [];
-let trailMesh = null;
 let trailTimer = 0;
 
 function getTrailMaxLen() {
   return Math.floor(TRAIL_BASE_LENGTH + TRAIL_LENGTH_PER_SPEED * (speedMult - 1));
 }
 
-function buildTrailMesh() {
-  if (trailMesh) {
-    scene.remove(trailMesh);
-    trailMesh.geometry.dispose();
-    trailMesh.material.dispose();
-    trailMesh = null;
-  }
+// 最大頂点数を事前計算して確保
+const TRAIL_MAX_POINTS = Math.floor(TRAIL_BASE_LENGTH + TRAIL_LENGTH_PER_SPEED * (MAX_SPEED_MULT - 1));
+const TRAIL_MAX_DIVISIONS = TRAIL_MAX_POINTS * 3;
+const TRAIL_MAX_VERTS = TRAIL_MAX_DIVISIONS * 2;
 
+const trailGeo = new THREE.BufferGeometry();
+const trailPosAttr = new THREE.Float32BufferAttribute(new Float32Array(TRAIL_MAX_VERTS * 3), 3);
+const trailColAttr = new THREE.Float32BufferAttribute(new Float32Array(TRAIL_MAX_VERTS * 4), 4);
+trailPosAttr.setUsage(THREE.DynamicDrawUsage);
+trailColAttr.setUsage(THREE.DynamicDrawUsage);
+trailGeo.setAttribute('position', trailPosAttr);
+trailGeo.setAttribute('color', trailColAttr);
+// インデックスも最大サイズで確保
+const trailMaxIndices = (TRAIL_MAX_VERTS - 2) * 3;
+const trailIndexArr = new Uint16Array(trailMaxIndices);
+for (let i = 0, idx = 0; i < TRAIL_MAX_VERTS - 2; i += 2) {
+  trailIndexArr[idx++] = i; trailIndexArr[idx++] = i + 1; trailIndexArr[idx++] = i + 2;
+  trailIndexArr[idx++] = i + 1; trailIndexArr[idx++] = i + 3; trailIndexArr[idx++] = i + 2;
+}
+trailGeo.setIndex(new THREE.BufferAttribute(trailIndexArr, 1));
+trailGeo.setDrawRange(0, 0);
+
+const trailMat = new THREE.MeshBasicMaterial({
+  vertexColors: true, transparent: true, side: THREE.DoubleSide, depthWrite: false
+});
+const trailMesh = new THREE.Mesh(trailGeo, trailMat);
+trailMesh.frustumCulled = false;
+scene.add(trailMesh);
+
+const _trailBaseColor = new THREE.Color(0x00ff88);
+const _trailTipColor  = new THREE.Color(0x004422);
+const _trailTmpColor  = new THREE.Color();
+const _trailVec3Arr = [];  // 再利用用
+
+function buildTrailMesh() {
   const len = trailHistory.length;
-  if (len < 2) return;
+  if (len < 2) { trailGeo.setDrawRange(0, 0); return; }
 
   // CatmullRomで滑らかな曲線を作成
-  const curvePoints = trailHistory.map(p => new THREE.Vector3(p.x, p.y, 0));
-  const curve = new THREE.CatmullRomCurve3(curvePoints, false, 'catmullrom', 0.5);
+  _trailVec3Arr.length = 0;
+  for (let i = 0; i < len; i++) {
+    const p = trailHistory[i];
+    _trailVec3Arr.push(new THREE.Vector3(p.x, p.y, 0));
+  }
+  const curve = new THREE.CatmullRomCurve3(_trailVec3Arr, false, 'catmullrom', 0.5);
   const divisions = Math.max(len * 3, 20);
   const smoothPoints = curve.getPoints(divisions);
+  const smoothLen = smoothPoints.length;
 
-  // 三角形ストリップでテーパー付きリボンを作成
-  const vertices = [];
-  const colors = [];
-  const baseColor = new THREE.Color(0x00ff88);
-  const tipColor = new THREE.Color(0x004422);
+  const posArr = trailPosAttr.array;
+  const colArr = trailColAttr.array;
 
-  for (let i = 0; i < smoothPoints.length; i++) {
-    const t = i / (smoothPoints.length - 1); // 0=tail, 1=head
+  for (let i = 0; i < smoothLen; i++) {
+    const t = i / (smoothLen - 1);
     const width = TRAIL_BASE_WIDTH * t * speedMult * 0.7;
 
-    // 法線方向を計算
     let nx = 0, ny = 1;
-    if (i < smoothPoints.length - 1) {
+    if (i < smoothLen - 1) {
       const dx = smoothPoints[i + 1].x - smoothPoints[i].x;
       const dy = smoothPoints[i + 1].y - smoothPoints[i].y;
       const l = Math.sqrt(dx * dx + dy * dy) || 1;
-      nx = -dy / l;
-      ny = dx / l;
+      nx = -dy / l; ny = dx / l;
     } else if (i > 0) {
       const dx = smoothPoints[i].x - smoothPoints[i - 1].x;
       const dy = smoothPoints[i].y - smoothPoints[i - 1].y;
       const l = Math.sqrt(dx * dx + dy * dy) || 1;
-      nx = -dy / l;
-      ny = dx / l;
+      nx = -dy / l; ny = dx / l;
     }
 
-    const px = smoothPoints[i].x;
-    const py = smoothPoints[i].y;
+    const px = smoothPoints[i].x, py = smoothPoints[i].y;
+    const vi = i * 2;
+    posArr[(vi) * 3]     = px + nx * width;
+    posArr[(vi) * 3 + 1] = py + ny * width;
+    posArr[(vi) * 3 + 2] = 0.5;
+    posArr[(vi + 1) * 3]     = px - nx * width;
+    posArr[(vi + 1) * 3 + 1] = py - ny * width;
+    posArr[(vi + 1) * 3 + 2] = 0.5;
 
-    vertices.push(px + nx * width, py + ny * width, 0.5);
-    vertices.push(px - nx * width, py - ny * width, 0.5);
-
-    const c = tipColor.clone().lerp(baseColor, t);
-    const alpha = t;
-    colors.push(c.r, c.g, c.b, alpha);
-    colors.push(c.r, c.g, c.b, alpha);
+    _trailTmpColor.copy(_trailTipColor).lerp(_trailBaseColor, t);
+    colArr[(vi) * 4]     = _trailTmpColor.r;
+    colArr[(vi) * 4 + 1] = _trailTmpColor.g;
+    colArr[(vi) * 4 + 2] = _trailTmpColor.b;
+    colArr[(vi) * 4 + 3] = t;
+    colArr[(vi + 1) * 4]     = _trailTmpColor.r;
+    colArr[(vi + 1) * 4 + 1] = _trailTmpColor.g;
+    colArr[(vi + 1) * 4 + 2] = _trailTmpColor.b;
+    colArr[(vi + 1) * 4 + 3] = t;
   }
 
-  // インデックス
-  const indices = [];
-  const vertCount = smoothPoints.length * 2;
-  for (let i = 0; i < vertCount - 2; i += 2) {
-    indices.push(i, i + 1, i + 2);
-    indices.push(i + 1, i + 3, i + 2);
-  }
-
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 4));
-  geo.setIndex(indices);
-
-  const mat = new THREE.MeshBasicMaterial({
-    vertexColors: true,
-    transparent: true,
-    side: THREE.DoubleSide,
-    depthWrite: false
-  });
-
-  trailMesh = new THREE.Mesh(geo, mat);
-  scene.add(trailMesh);
+  trailPosAttr.needsUpdate = true;
+  trailColAttr.needsUpdate = true;
+  const vertCount = smoothLen * 2;
+  const indexCount = (vertCount - 2) * 3;
+  trailGeo.setDrawRange(0, indexCount);
 }
 
 // 軌跡と敵の衝突判定（線分ごと）
@@ -276,7 +327,6 @@ function checkTrailEnemyCollision() {
       const a = trailHistory[j];
       const b = trailHistory[j + 1];
 
-      // 線分abへの点eからの最短距離の二乗
       const abx = b.x - a.x, aby = b.y - a.y;
       const aex = ex - a.x, aey = ey - a.y;
       const abLenSq = abx * abx + aby * aby;
@@ -288,10 +338,64 @@ function checkTrailEnemyCollision() {
       const dx = ex - cx, dy = ey - cy;
 
       if (dx * dx + dy * dy < trailCollDistSq) {
-        killEnemy(i);
+        killEnemy(i, false);
         break;
       }
     }
+  }
+}
+
+// ============================================================
+// 消滅パーティクル（美しい装飾、衝突なし）— ジオメトリ共有
+// ============================================================
+const particles = [];
+const particleGeoShared = new THREE.CircleGeometry(1.5, 8);
+
+function spawnParticles(x, y, color) {
+  const baseHsl = {};
+  new THREE.Color(color).getHSL(baseHsl);
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    const hue = (baseHsl.h + (Math.random() - 0.5) * 0.15 + 1) % 1;
+    const c = new THREE.Color().setHSL(hue, 0.9, 0.7);
+    const mat = new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 1.0 });
+    const mesh = new THREE.Mesh(particleGeoShared, mat);
+    mesh.position.set(x, y, 3);
+    scene.add(mesh);
+    const angle = (Math.PI * 2 * i) / PARTICLE_COUNT + Math.random() * 0.5;
+    const speed = 80 + Math.random() * 150;
+    particles.push({
+      mesh,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: PARTICLE_LIFE
+    });
+  }
+}
+
+// ============================================================
+// 敵の破片（衝突あり、連鎖分裂）
+// ============================================================
+const fragments = [];
+const fragmentGeoShared = new THREE.CircleGeometry(FRAGMENT_RADIUS, 10);
+
+function spawnFragments(x, y, color) {
+  const baseHsl = {};
+  new THREE.Color(color).getHSL(baseHsl);
+  for (let i = 0; i < FRAGMENT_COUNT; i++) {
+    const hue = (baseHsl.h + (i * 0.08)) % 1;
+    const c = new THREE.Color().setHSL(hue, 0.85, 0.55);
+    const mat = new THREE.MeshBasicMaterial({ color: c });
+    const mesh = new THREE.Mesh(fragmentGeoShared, mat);
+    mesh.position.set(x, y, 1.5);
+    scene.add(mesh);
+    const angle = (Math.PI * 2 * i) / FRAGMENT_COUNT + Math.random() * 0.4;
+    const speed = FRAGMENT_SPEED * (0.8 + Math.random() * 0.4);
+    fragments.push({
+      mesh,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      color: c.getHex()
+    });
   }
 }
 
@@ -383,11 +487,19 @@ function resetGame() {
   messageEl.style.display = 'none';
 
   for (const e of enemies) scene.remove(e);
+  for (const ed of enemyData) {
+    if (ed.trailLine) { scene.remove(ed.trailLine); ed.trailLine.geometry.dispose(); ed.trailLine.material.dispose(); }
+  }
   enemies.length = 0;
   enemyData.length = 0;
 
+  for (const p of particles) scene.remove(p.mesh);
+  particles.length = 0;
+  for (const f of fragments) scene.remove(f.mesh);
+  fragments.length = 0;
+
   trailHistory.length = 0;
-  if (trailMesh) { scene.remove(trailMesh); trailMesh.geometry.dispose(); trailMesh.material.dispose(); trailMesh = null; }
+  trailGeo.setDrawRange(0, 0);
 
   spawnEnemies();
 }
@@ -395,15 +507,28 @@ function resetGame() {
 // ============================================================
 // 敵撃破処理
 // ============================================================
-function killEnemy(index) {
+function killEnemy(index, byPlayer) {
   const e = enemies[index];
+  const ex = e.position.x, ey = e.position.y;
+  const color = e.material.color.getHex();
+
   addScore(SCORE_PER_ENEMY);
 
   // スピードアップ
   speedMult = Math.min(speedMult + SPEED_BOOST_PER_KILL, MAX_SPEED_MULT);
   updateHud();
 
+  // パーティクル演出（常に出る）
+  spawnParticles(ex, ey, color);
+
+  // ボール本体がぶつかった場合は分裂破片を飛ばす
+  if (byPlayer) {
+    spawnFragments(ex, ey, color);
+  }
+
   scene.remove(e);
+  const ed = enemyData[index];
+  if (ed.trailLine) { scene.remove(ed.trailLine); ed.trailLine.geometry.dispose(); ed.trailLine.material.dispose(); ed.trailLine = null; }
   enemies.splice(index, 1);
   enemyData.splice(index, 1);
 }
@@ -484,18 +609,65 @@ function animate() {
       onGround = true;
     } else {
       onGround = false;
+      // 滂空中はスピード加速
+      speedMult = Math.min(speedMult + AIRBORNE_ACCEL * dt, MAX_SPEED_MULT);
     }
 
-    // 敵の移動と壁バウンド
+    // 敵の移動と壁バウンド + 色更新 + 軌跡
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
       const ed = enemyData[i];
       e.position.x += ed.vx * dt;
       e.position.y += ed.vy * dt;
-      if (e.position.x < eInnerLeft)  { e.position.x = eInnerLeft;  ed.vx = Math.abs(ed.vx); }
-      if (e.position.x > eInnerRight) { e.position.x = eInnerRight; ed.vx = -Math.abs(ed.vx); }
-      if (e.position.y < eInnerBottom){ e.position.y = eInnerBottom; ed.vy = Math.abs(ed.vy); }
-      if (e.position.y > eInnerTop)   { e.position.y = eInnerTop;   ed.vy = -Math.abs(ed.vy); }
+
+      // 壁で跳ね返る（少し反発）
+      if (e.position.x < eInnerLeft)  { e.position.x = eInnerLeft;  ed.vx = Math.abs(ed.vx) + ENEMY_WALL_BOUNCE; }
+      if (e.position.x > eInnerRight) { e.position.x = eInnerRight; ed.vx = -(Math.abs(ed.vx) + ENEMY_WALL_BOUNCE); }
+      if (e.position.y < eInnerBottom){ e.position.y = eInnerBottom; ed.vy = Math.abs(ed.vy) + ENEMY_WALL_BOUNCE; }
+      if (e.position.y > eInnerTop)   { e.position.y = eInnerTop;   ed.vy = -(Math.abs(ed.vy) + ENEMY_WALL_BOUNCE); }
+
+      // 敵の色を移動方向で変える
+      const eAngle = Math.atan2(ed.vy, ed.vx);
+      const eHue = (eAngle / (Math.PI * 2) + 1) % 1;
+      e.material.color.setHSL(eHue, 0.8, 0.55);
+
+      // 敵の軌跡更新（座標更新のみ、オブジェクト再生成なし）
+      ed.trail.push({ x: e.position.x, y: e.position.y });
+      while (ed.trail.length > ENEMY_TRAIL_LENGTH) ed.trail.shift();
+      const tLen = ed.trail.length;
+      if (tLen >= 2) {
+        const arr = ed.trailPosAttr.array;
+        for (let ti = 0; ti < tLen; ti++) {
+          arr[ti * 3]     = ed.trail[ti].x;
+          arr[ti * 3 + 1] = ed.trail[ti].y;
+          arr[ti * 3 + 2] = 0.8;
+        }
+        ed.trailPosAttr.needsUpdate = true;
+        ed.trailLine.geometry.setDrawRange(0, tLen);
+        ed.trailLine.material.color.copy(e.material.color);
+      }
+    }
+
+    // プレイヤーの色を移動方向で変える
+    const pSpeed = Math.sqrt(vx * vx + vy * vy);
+    if (pSpeed > 10) {
+      const pAngle = Math.atan2(vy, vx);
+      const pHue = (pAngle / (Math.PI * 2) + 1) % 1;
+      const brightness = 0.45 + 0.25 * Math.min(speedMult / MAX_SPEED_MULT, 1);
+      playerMat.color.setHSL(pHue, 0.9, brightness);
+    }
+
+    // 敵への引力（近い敵に少し吸い寄せられる）
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i];
+      const gx = e.position.x - player.position.x;
+      const gy = e.position.y - player.position.y;
+      const gDist = Math.sqrt(gx * gx + gy * gy);
+      if (gDist < GRAVITY_PULL_RANGE && gDist > 1) {
+        const strength = GRAVITY_PULL * (1 - gDist / GRAVITY_PULL_RANGE);
+        vx += (gx / gDist) * strength * dt;
+        vy += (gy / gDist) * strength * dt;
+      }
     }
 
     // 軌跡の記録
@@ -518,16 +690,98 @@ function animate() {
       const e = enemies[i];
       const dx = player.position.x - e.position.x;
       const dy = player.position.y - e.position.y;
-      if (dx * dx + dy * dy < collisionDist * collisionDist) {
-        killEnemy(i);
+      const distSq = dx * dx + dy * dy;
+      if (distSq < collisionDist * collisionDist) {
+        // 相対速度を計算（向かい合っていると大きい）
+        const ed = enemyData[i];
+        const rvx = vx - ed.vx;
+        const rvy = vy - ed.vy;
+        // 衝突方向の相対速度（プレイヤーから敵への方向）
+        const dist = Math.sqrt(distSq) || 1;
+        const nx = -dx / dist, ny = -dy / dist;
+        const approachSpeed = rvx * nx + rvy * ny;
+
+        if (approachSpeed > RELATIVE_SPEED_KILL) {
+          killEnemy(i, true);
+        } else {
+          // はじくだけ（ノックバック）
+          ed.vx = dx / dist * KNOCKBACK_SPEED;
+          ed.vy = dy / dist * KNOCKBACK_SPEED;
+          vx += -dx / dist * 80;
+          vy += -dy / dist * 80;
+          e.position.x += dx / dist * 2;
+          e.position.y += dy / dist * 2;
+        }
       }
     }
 
     // 軌跡と敵の衝突判定
     checkTrailEnemyCollision();
 
+    // 破片の更新
+    const fInnerLeft   = -hw + WALL_THICKNESS + FRAGMENT_RADIUS;
+    const fInnerRight  =  hw - WALL_THICKNESS - FRAGMENT_RADIUS;
+    const fInnerBottom = -hh + WALL_THICKNESS + FRAGMENT_RADIUS;
+    const fInnerTop    =  hh - WALL_THICKNESS - FRAGMENT_RADIUS;
+    const fragCollDist = FRAGMENT_RADIUS + ENEMY_RADIUS;
+
+    for (let i = fragments.length - 1; i >= 0; i--) {
+      const f = fragments[i];
+      f.mesh.position.x += f.vx * dt;
+      f.mesh.position.y += f.vy * dt;
+
+      // 壁判定 → 消滅
+      const fx = f.mesh.position.x, fy = f.mesh.position.y;
+      if (fx < fInnerLeft || fx > fInnerRight || fy < fInnerBottom || fy > fInnerTop) {
+        spawnParticles(fx, fy, f.color);
+        scene.remove(f.mesh);
+        fragments.splice(i, 1);
+        continue;
+      }
+
+      // 敵との衝突 → 敵を分裂させる
+      for (let j = enemies.length - 1; j >= 0; j--) {
+        const e = enemies[j];
+        const ddx = fx - e.position.x;
+        const ddy = fy - e.position.y;
+        if (ddx * ddx + ddy * ddy < fragCollDist * fragCollDist) {
+          // この敵も分裂
+          const eColor = e.material.color.getHex();
+          addScore(SCORE_PER_ENEMY);
+          speedMult = Math.min(speedMult + SPEED_BOOST_PER_KILL, MAX_SPEED_MULT);
+          spawnParticles(e.position.x, e.position.y, eColor);
+          spawnFragments(e.position.x, e.position.y, eColor);
+          scene.remove(e);
+          const edj = enemyData[j];
+          if (edj.trailLine) { scene.remove(edj.trailLine); edj.trailLine.geometry.dispose(); edj.trailLine.material.dispose(); }
+          enemies.splice(j, 1);
+          enemyData.splice(j, 1);
+          updateHud();
+          // 破片も消える
+          scene.remove(f.mesh);
+          fragments.splice(i, 1);
+          break;
+        }
+      }
+    }
+
+    // パーティクル更新
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.life -= dt;
+      if (p.life <= 0) {
+        scene.remove(p.mesh);
+        particles.splice(i, 1);
+        continue;
+      }
+      p.mesh.position.x += p.vx * dt;
+      p.mesh.position.y += p.vy * dt;
+      p.mesh.material.opacity = p.life / PARTICLE_LIFE;
+      p.mesh.scale.setScalar(0.5 + 0.5 * (p.life / PARTICLE_LIFE));
+    }
+
     // クリア判定
-    if (enemies.length === 0) {
+    if (enemies.length === 0 && fragments.length === 0) {
       gameCleared = true;
       messageEl.textContent = 'GAME CLEAR!  SCORE: ' + score;
       messageEl.style.display = 'block';
