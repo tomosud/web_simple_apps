@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <title>HDR Glow Tap</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div class="app-shell">
+    <canvas id="scene"></canvas>
+
+    <div class="hud">
+      <div class="panel title-panel">
+        <p class="eyebrow">Three.js HDR Demo</p>
+        <h1>HDR Glow Tap</h1>
+        <p class="desc">光るポリゴンをタップしてスコアを伸ばす、GitHub Pages向けの軽いデモです。</p>
+      </div>
+
+      <div class="panel stats-panel">
+        <div class="stat">
+          <span class="label">SCORE</span>
+          <strong id="scoreValue">0</strong>
+        </div>
+        <div class="stat">
+          <span class="label">STREAK</span>
+          <strong id="streakValue">0</strong>
+        </div>
+        <div class="stat">
+          <span class="label">ENERGY</span>
+          <strong id="energyValue">100</strong>
+        </div>
+      </div>
+
+      <div class="panel controls-panel">
+        <label for="exposureSlider">Brightness</label>
+        <div class="slider-row">
+          <input id="exposureSlider" type="range" min="0.7" max="3.2" step="0.05" value="1.10">
+          <output id="exposureValue" for="exposureSlider">1.10x</output>
+        </div>
+        <p class="hint">`toneMappingExposure` と bloom を連動させて、明るい粒子の見え方を変えています。</p>
+        <p class="hint" id="dynamicRangeLabel">Display: checking...</p>
+      </div>
+
+      <div class="panel help-panel">
+        <p>操作: 画面をタップ</p>
+        <p>青や金の発光体は加点、赤いデコイは減点です。</p>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="gameOverOverlay">
+      <div class="panel overlay-panel">
+        <p class="eyebrow">Round Finished</p>
+        <h2>Glow collapsed</h2>
+        <p id="finalScore">Score 0</p>
+        <button id="restartButton" type="button">Restart</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
