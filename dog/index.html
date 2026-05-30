@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>シュナウザー・アジリティ・ダッシュ</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0d1117;
+    overflow: hidden;
+    font-family: -apple-system, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none;
+    overscroll-behavior: none;
+  }
+  #wrap {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #0d1117;
+  }
+  #game {
+    display: block;
+    background: #bfe3ff;
+    touch-action: none;
+  }
+  .overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    color: #fff;
+    background: rgba(8, 14, 24, 0.78);
+    backdrop-filter: blur(2px);
+    padding: 24px;
+    z-index: 10;
+  }
+  .overlay.hidden { display: none; }
+  .overlay h1 { font-size: 26px; margin-bottom: 6px; letter-spacing: 1px; }
+  .overlay .sub { font-size: 14px; opacity: 0.85; line-height: 1.7; margin-bottom: 18px; max-width: 320px; }
+  .overlay .big { font-size: 44px; font-weight: 800; color: #ffd34d; margin: 4px 0; }
+  .overlay .row { font-size: 15px; opacity: 0.9; margin: 2px 0; }
+  .btn {
+    margin-top: 18px;
+    background: linear-gradient(180deg,#ffd34d,#ff9f1c);
+    color: #3a2400; font-weight: 800; font-size: 18px;
+    border: none; border-radius: 999px;
+    padding: 14px 34px;
+    box-shadow: 0 6px 0 #b86a00, 0 10px 18px rgba(0,0,0,.4);
+    cursor: pointer;
+  }
+  .btn:active { transform: translateY(3px); box-shadow: 0 3px 0 #b86a00, 0 5px 10px rgba(0,0,0,.4); }
+  .hint { margin-top: 14px; font-size: 12px; opacity: 0.6; }
+  .paw { font-size: 40px; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+
+  <div id="startScreen" class="overlay">
+    <div class="paw">🐶</div>
+    <h1>シュナウザー・アジリティ・ダッシュ</h1>
+    <div class="sub">
+      上の<b>マップ</b>で先を読み、下の<b>判定ライン</b>に障害物が重なった瞬間に<b>タップ</b>！<br>
+      タイミングが合えば高速通過。失敗すると一瞬止まってタイムロス。<br>
+      <b>60秒でどこまで走れる？</b>
+    </div>
+    <button class="btn" id="startBtn">スタート</button>
+    <div class="hint">タップ / クリック / スペースキー で操作</div>
+  </div>
+
+  <div id="overScreen" class="overlay hidden">
+    <div class="paw">🏁</div>
+    <h1>ゴール！</h1>
+    <div class="row">走行距離</div>
+    <div class="big" id="finalDist">0 m</div>
+    <div class="row" id="finalBest">ベスト 0 m</div>
+    <div class="row" id="finalStats">最大コンボ 0 ／ PERFECT 0</div>
+    <button class="btn" id="retryBtn">もう一度</button>
+    <div class="hint">タップでリトライ</div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const startScreen = document.getElementById("startScreen");
+  const overScreen  = document.getElementById("overScreen");
+  const startBtn    = document.getElementById("startBtn");
+  const retryBtn    = document.getElementById("retryBtn");
+
+  // ---- layout (CSS pixels) ----
+  let W = 0, H = 0, dpr = 1;
+  let mapTop, mapBottom, mapH;     // 上：俯瞰マップ
+  let playTop, playBottom, playH;  // 下：プレイ画面
+  let groundY;                     // 地面の高さ（プレイ画面内）
+  let dogX;                        // 犬の固定スクリーンX = 判定ライン
+
+  function resize() {
+    const rect = canvas.getBoundingClientRect();
+    // 縦長スマホ想定。実ビューポートにフィット（最大幅520）
+    const vw = Math.min(window.innerWidth, 520);
+    const vh = window.innerHeight;
+    W = vw; H = vh;
+    dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    canvas.width  = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    mapTop = 0;
+    mapH = Math.round(H * 0.34);
+    mapBottom = mapTop + mapH;
+
+    playTop = mapBottom;
+    playBottom = H;
+    playH = playBottom - playTop;
+
+    groundY = playTop + playH * 0.72;
+    dogX = W * 0.28;
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  // ---- game constants ----
+  const TYPES = ["jump", "ramp", "tunnel"];
+  const TYPE_COLOR = { jump: "#2f7bff", ramp: "#ff8a1c", tunnel: "#2bbf6a" };
+  const TYPE_LABEL = { jump: "跳", ramp: "坂", tunnel: "潜" };
+
+  const RUN_TIME = 60;            // 制限時間（秒）
+  const BASE_SPEED = 250;        // px/sec（基準スクロール速度）
+  const PERFECT_PX = 16;         // 判定ラインからの許容（px）
+  const GOOD_PX = 46;
+  const EARLY_PX = 130;          // これより手前で押すと「早すぎ」失敗
+  const PAUSE_TIME = 1.05;       // 失敗時の停止秒数
+  const PREVIEW_AHEAD = 2600;    // マップの先読み距離（px）
+
+  const PX_PER_METER = 28;       // 表示用：距離換算
+
+  // ---- state ----
+  let state = "ready"; // ready | playing | over
+  let scroll = 0;      // ワールドスクロール量(px) = 犬のワールド位置
+  let speed = BASE_SPEED;
+  let timeLeft = RUN_TIME;
+  let obstacles = [];  // {worldX, type, resolved, result}
+  let nextSpawnX = 0;
+  let combo = 0, maxCombo = 0;
+  let perfects = 0, hits = 0, misses = 0;
+  let paused = false, pauseTimer = 0;
+  let best = +(localStorage.getItem("schnauzer_best") || 0);
+
+  // 犬アニメーション
+  let dog = { yOff: 0, action: null, aTimer: 0, aDur: 0, legPhase: 0, tilt: 0, shake: 0 };
+  // 判定フィードバック
+  let feedback = { text: "", color: "#fff", timer: 0 };
+  // 簡易パーティクル
+  let particles = [];
+  // 背景の丘・雲
+  let clouds = [];
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+
+  function initClouds() {
+    clouds = [];
+    for (let i = 0; i < 6; i++) {
+      clouds.push({ x: rand(0, W), y: rand(playTop + 10, playTop + playH * 0.4), s: rand(0.5, 1.1), spd: rand(8, 22) });
+    }
+  }
+
+  function reset() {
+    scroll = 0; speed = BASE_SPEED; timeLeft = RUN_TIME;
+    obstacles = []; nextSpawnX = W * 0.9;
+    combo = 0; maxCombo = 0; perfects = 0; hits = 0; misses = 0;
+    paused = false; pauseTimer = 0;
+    dog = { yOff: 0, action: null, aTimer: 0, aDur: 0, legPhase: 0, tilt: 0, shake: 0 };
+    feedback = { text: "", color: "#fff", timer: 0 };
+    particles = [];
+    initClouds();
+    spawnAhead();
+  }
+
+  function difficulty() {
+    // 距離が伸びるほど少し難化（0→1）
+    return Math.min(1, scroll / 9000);
+  }
+
+  function spawnAhead() {
+    // 画面右＋先読み範囲ぶん、障害物を生成しておく
+    const limit = scroll + W + PREVIEW_AHEAD;
+    const d = difficulty();
+    while (nextSpawnX < limit) {
+      const type = TYPES[(Math.random() * TYPES.length) | 0];
+      obstacles.push({ worldX: nextSpawnX, type, resolved: false, result: null });
+      const minGap = 360 - d * 120;   // 360 → 240
+      const maxGap = 620 - d * 200;   // 620 → 420
+      nextSpawnX += rand(minGap, maxGap);
+    }
+  }
+
+  // ---- input ----
+  function tap() {
+    if (state === "ready") { startGame(); return; }
+    if (state === "over")  { startGame(); return; }
+    if (state !== "playing") return;
+    if (paused) return; // 停止中は無効
+    judgeTap();
+  }
+
+  function judgeTap() {
+    // 判定対象：判定ライン手前～少し過ぎまでで未解決の最前の障害物
+    let target = null;
+    for (const o of obstacles) {
+      if (o.resolved) continue;
+      const delta = o.worldX - scroll; // +なら手前（これから来る）
+      if (delta < -GOOD_PX) continue;  // すでに通り過ぎ（自動ミス対象）
+      if (delta > EARLY_PX) continue;  // まだ遠い
+      if (!target || delta < (target.worldX - scroll)) target = o;
+    }
+    if (!target) {
+      // 対象なし：空振り（ペナルティ無し、軽い演出だけ）
+      feedback = { text: "", color: "#fff", timer: 0 };
+      return;
+    }
+    const delta = target.worldX - scroll;
+    const adist = Math.abs(delta);
+    if (adist <= GOOD_PX) {
+      target.resolved = true;
+      const perfect = adist <= PERFECT_PX;
+      target.result = perfect ? "perfect" : "good";
+      hits++; if (perfect) perfects++;
+      combo++; if (combo > maxCombo) maxCombo = combo;
+      startDogAction(target.type);
+      burst(target.type, perfect);
+      feedback = {
+        text: perfect ? "PERFECT!" : "GOOD",
+        color: perfect ? "#ffd34d" : "#7CFC9A",
+        timer: 0.6
+      };
+      beep(perfect ? "perfect" : "good");
+    } else {
+      // 早すぎ → 失敗
+      target.resolved = true;
+      target.result = "miss";
+      fail("早すぎ", target);
+    }
+  }
+
+  function fail(reason, o) {
+    misses++;
+    combo = 0;
+    paused = true; pauseTimer = PAUSE_TIME;
+    speed = BASE_SPEED;
+    dog.action = "stumble"; dog.aTimer = 0; dog.aDur = PAUSE_TIME; dog.shake = 1;
+    feedback = { text: "MISS", color: "#ff5d5d", timer: 0.8 };
+    beep("miss");
+  }
+
+  function startDogAction(type) {
+    dog.action = type;
+    dog.aTimer = 0;
+    dog.aDur = (type === "tunnel") ? 0.42 : 0.5;
+  }
+
+  // ---- particles ----
+  function burst(type, perfect) {
+    const col = TYPE_COLOR[type] || "#fff";
+    const n = perfect ? 16 : 9;
+    for (let i = 0; i < n; i++) {
+      const a = rand(-Math.PI, 0);
+      const sp = rand(60, perfect ? 320 : 200);
+      particles.push({
+        x: dogX, y: groundY - 26,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40,
+        life: rand(0.4, 0.8), t: 0,
+        col: perfect ? (Math.random() < 0.5 ? "#ffd34d" : col) : col,
+        r: rand(2, 4)
+      });
+    }
+  }
+
+  // ---- audio (Web Audio, ファイル不要) ----
+  let actx = null;
+  function ensureAudio() {
+    if (!actx) {
+      try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+    }
+    if (actx && actx.state === "suspended") actx.resume();
+  }
+  function tone(freq, t0, dur, type, vol) {
+    if (!actx) return;
+    const o = actx.createOscillator();
+    const g = actx.createGain();
+    o.type = type || "sine";
+    o.frequency.setValueAtTime(freq, t0);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol || 0.18, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  }
+  function beep(kind) {
+    if (!actx) return;
+    const t = actx.currentTime;
+    if (kind === "perfect") { tone(880, t, 0.12, "triangle", 0.2); tone(1320, t + 0.07, 0.12, "triangle", 0.16); }
+    else if (kind === "good") { tone(660, t, 0.12, "triangle", 0.18); }
+    else if (kind === "miss") { tone(180, t, 0.22, "sawtooth", 0.18); tone(120, t + 0.05, 0.22, "sawtooth", 0.14); }
+    else if (kind === "go") { tone(523, t, 0.1, "triangle", 0.18); tone(784, t + 0.1, 0.14, "triangle", 0.18); }
+  }
+
+  // ---- update ----
+  let last = 0;
+  function loop(ts) {
+    if (!last) last = ts;
+    let dt = (ts - last) / 1000;
+    last = ts;
+    if (dt > 0.05) dt = 0.05; // タブ復帰などのスパイク抑制
+    if (state === "playing") update(dt);
+    render(dt);
+    requestAnimationFrame(loop);
+  }
+
+  function update(dt) {
+    // タイマー
+    timeLeft -= dt;
+    if (timeLeft <= 0) { timeLeft = 0; gameOver(); return; }
+
+    if (paused) {
+      pauseTimer -= dt;
+      dog.shake = Math.max(0, pauseTimer / PAUSE_TIME);
+      if (pauseTimer <= 0) { paused = false; dog.action = null; dog.shake = 0; }
+    } else {
+      // 速度：基準＋難化＋コンボ加速
+      const d = difficulty();
+      const comboBoost = 1 + Math.min(combo, 25) * 0.018; // 最大+45%
+      speed = (BASE_SPEED + d * 170) * comboBoost;
+      scroll += speed * dt;
+      spawnAhead();
+
+      // 自動ミス：判定ラインを大きく過ぎても未解決なら失敗
+      for (const o of obstacles) {
+        if (o.resolved) continue;
+        if (o.worldX - scroll < -GOOD_PX - 4) {
+          o.resolved = true; o.result = "miss";
+          fail("遅れ", o);
+          break; // 1フレーム1ミスまで
+        }
+      }
+    }
+
+    // 画面外の古い障害物を掃除
+    if (obstacles.length > 60 && obstacles[0].worldX - scroll < -W) {
+      obstacles.splice(0, obstacles.length - 60);
+    }
+
+    // 犬アニメ
+    dog.legPhase += dt * (paused ? 0 : speed) * 0.045;
+    if (dog.action && dog.action !== "stumble") {
+      dog.aTimer += dt;
+      const p = Math.min(1, dog.aTimer / dog.aDur);
+      if (dog.action === "jump") {
+        dog.yOff = -Math.sin(p * Math.PI) * (playH * 0.22);
+        dog.tilt = Math.sin(p * Math.PI) * 0.15;
+      } else if (dog.action === "ramp") {
+        dog.yOff = -Math.sin(p * Math.PI) * (playH * 0.16);
+        dog.tilt = (p < 0.5 ? -1 : 1) * 0.22 * Math.sin(p * Math.PI);
+      } else if (dog.action === "tunnel") {
+        dog.yOff = Math.sin(p * Math.PI) * (playH * 0.10); // 下にかがむ
+        dog.tilt = 0;
+      }
+      if (p >= 1) { dog.action = null; dog.yOff = 0; dog.tilt = 0; }
+    } else if (!dog.action) {
+      dog.yOff += (0 - dog.yOff) * Math.min(1, dt * 12);
+      dog.tilt  += (0 - dog.tilt)  * Math.min(1, dt * 12);
+    }
+
+    if (feedback.timer > 0) feedback.timer -= dt;
+
+    // 雲
+    for (const c of clouds) {
+      c.x -= (c.spd + speed * 0.05) * dt;
+      if (c.x < -60) { c.x = W + 40; c.y = rand(playTop + 10, playTop + playH * 0.4); }
+    }
+
+    // パーティクル
+    for (const p of particles) {
+      p.t += dt; p.vy += 600 * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+    }
+    particles = particles.filter(p => p.t < p.life);
+  }
+
+  // ---- render ----
+  function render(dt) {
+    // 背景（プレイ画面の空）
+    drawPlayBackground(dt);
+    drawObstaclesPlay();
+    drawJudgeLine();
+    drawDog();
+    drawParticles();
+    drawMap();      // 上の俯瞰マップ
+    drawHUD();
+    drawFeedback();
+  }
+
+  function drawPlayBackground() {
+    // 空グラデ
+    const g = ctx.createLinearGradient(0, playTop, 0, playBottom);
+    g.addColorStop(0, "#bfe3ff");
+    g.addColorStop(1, "#e9f7ff");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, playTop, W, playH);
+
+    // 雲
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    for (const c of clouds) {
+      const r = 16 * c.s;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, r, 0, 7);
+      ctx.arc(c.x + r, c.y + 4, r * 0.8, 0, 7);
+      ctx.arc(c.x - r, c.y + 5, r * 0.7, 0, 7);
+      ctx.fill();
+    }
+
+    // 遠景の丘（パララックス）
+    ctx.fillStyle = "#9ed99b";
+    const hillY = groundY + 8;
+    ctx.beginPath();
+    ctx.moveTo(0, hillY);
+    const off1 = (scroll * 0.2) % 240;
+    for (let x = -off1; x <= W + 240; x += 240) {
+      ctx.quadraticCurveTo(x + 60, hillY - 38, x + 120, hillY);
+      ctx.quadraticCurveTo(x + 180, hillY + 28, x + 240, hillY);
+    }
+    ctx.lineTo(W, playBottom); ctx.lineTo(0, playBottom); ctx.closePath();
+    ctx.fill();
+
+    // 地面
+    ctx.fillStyle = "#caa86a";
+    ctx.fillRect(0, groundY, W, playBottom - groundY);
+    ctx.fillStyle = "#7bbf5a";
+    ctx.fillRect(0, groundY, W, 8);
+
+    // 地面の流れる縞（スピード感）
+    ctx.strokeStyle = "rgba(120,90,40,0.35)";
+    ctx.lineWidth = 3;
+    const stepGround = 60;
+    const offG = (scroll) % stepGround;
+    ctx.beginPath();
+    for (let x = -offG; x <= W; x += stepGround) {
+      ctx.moveTo(x, groundY + 22);
+      ctx.lineTo(x - 16, groundY + 22);
+    }
+    ctx.stroke();
+
+    // スピードライン（高速時）
+    if (speed > BASE_SPEED * 1.1 && !paused) {
+      const alpha = Math.min(0.25, (speed / BASE_SPEED - 1) * 0.5);
+      ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 6; i++) {
+        const yy = playTop + playH * (0.2 + 0.12 * i) + ((scroll * 2) % 60);
+        const xx = (i * 97 + (scroll * 3)) % (W + 120) - 60;
+        ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx + 40, yy); ctx.stroke();
+      }
+    }
+  }
+
+  function obScreenX(o) { return dogX + (o.worldX - scroll); }
+
+  function drawObstaclesPlay() {
+    for (const o of obstacles) {
+      const x = obScreenX(o);
+      if (x < -80 || x > W + 80) continue;
+      const passed = o.resolved && o.result !== "miss";
+      drawObstacle(o.type, x, passed, o);
+    }
+  }
+
+  function drawObstacle(type, x, passed, o) {
+    const baseY = groundY;
+    ctx.save();
+    if (passed) ctx.globalAlpha = 0.45;
+    if (type === "jump") {
+      const h = playH * 0.20, w = 26;
+      ctx.fillStyle = "#fff"; ctx.strokeStyle = TYPE_COLOR.jump; ctx.lineWidth = 4;
+      // ポール
+      ctx.fillRect(x - w/2, baseY - h, 5, h);
+      ctx.fillRect(x + w/2 - 5, baseY - h, 5, h);
+      ctx.strokeRect(x - w/2, baseY - h, 5, h);
+      ctx.strokeRect(x + w/2 - 5, baseY - h, 5, h);
+      // バー
+      ctx.fillStyle = TYPE_COLOR.jump;
+      ctx.fillRect(x - w/2 - 3, baseY - h, w + 6, 8);
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(x - w/2 - 3, baseY - h + 9, w + 6, 6);
+    } else if (type === "ramp") {
+      const h = playH * 0.22, w = 70;
+      ctx.fillStyle = TYPE_COLOR.ramp;
+      ctx.beginPath();
+      ctx.moveTo(x - w/2, baseY);
+      ctx.lineTo(x, baseY - h);
+      ctx.lineTo(x + w/2, baseY);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "#c96a00"; ctx.lineWidth = 3; ctx.stroke();
+      // 滑り止めライン
+      ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 2;
+      for (let i = 1; i <= 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(x - w/2 + (w/2)*(i/4), baseY - h*(i/4)*0 );
+        ctx.stroke();
+      }
+    } else if (type === "tunnel") {
+      const h = playH * 0.18, w = 76;
+      ctx.fillStyle = TYPE_COLOR.tunnel;
+      ctx.beginPath();
+      ctx.moveTo(x - w/2, baseY);
+      ctx.lineTo(x - w/2, baseY - h*0.4);
+      ctx.quadraticCurveTo(x, baseY - h*1.4, x + w/2, baseY - h*0.4);
+      ctx.lineTo(x + w/2, baseY);
+      ctx.closePath(); ctx.fill();
+      // 入口の穴
+      ctx.fillStyle = "#0c5b33";
+      ctx.beginPath();
+      ctx.ellipse(x, baseY - h*0.35, w*0.26, h*0.5, 0, 0, 7);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawJudgeLine() {
+    // 判定ライン（犬の位置）
+    const inWindow = obstacles.some(o => !o.resolved && Math.abs(o.worldX - scroll) <= GOOD_PX);
+    ctx.save();
+    ctx.strokeStyle = inWindow ? "rgba(255,211,77,0.95)" : "rgba(255,255,255,0.55)";
+    ctx.lineWidth = inWindow ? 4 : 2;
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(dogX, playTop + 8);
+    ctx.lineTo(dogX, groundY + 6);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // 地面の判定マーカー
+    ctx.fillStyle = inWindow ? "rgba(255,211,77,0.9)" : "rgba(255,255,255,0.5)";
+    ctx.beginPath();
+    ctx.moveTo(dogX, groundY - 2);
+    ctx.lineTo(dogX - 8, groundY + 12);
+    ctx.lineTo(dogX + 8, groundY + 12);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
+  // ---- ミニチュアシュナウザー（横向き・シンプル図形） ----
+  function drawDog() {
+    const x = dogX;
+    let y = groundY + dog.yOff;
+    if (dog.shake > 0) {
+      y += Math.sin(performance.now() / 30) * 3 * dog.shake;
+      x; // x方向は固定
+    }
+    const sc = Math.max(0.85, Math.min(1.25, playH / 480)); // スケール係数
+    const bodyW = 64, bodyH = 30;
+    const legSwing = paused ? 0 : Math.sin(dog.legPhase);
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(dog.tilt);
+    ctx.scale(sc, sc);
+
+    // 影
+    ctx.save();
+    ctx.scale(1, 0.35);
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.beginPath(); ctx.ellipse(0, (28 - dog.yOff*2.6), 40, 16, 0, 0, 7); ctx.fill();
+    ctx.restore();
+
+    const grayD = "#6f7378";   // ソルト&ペッパー濃い
+    const grayL = "#aeb2b6";   // 明るい
+    const beard = "#d9dcdf";   // 眉・ヒゲ
+
+    // 後ろ脚
+    ctx.strokeStyle = grayD; ctx.lineWidth = 7; ctx.lineCap = "round";
+    leg(18, 14, legSwing);
+    leg(10, 14, -legSwing);
+    // 尻尾（短いドック）
+    ctx.fillStyle = grayD;
+    ctx.save(); ctx.translate(-30, -18); ctx.rotate(-0.5);
+    ctx.fillRect(-3, -10, 6, 14); ctx.restore();
+
+    // 胴体
+    ctx.fillStyle = grayL;
+    roundRect(-32, -bodyH, bodyW, bodyH, 12); ctx.fill();
+    // 背の濃い部分
+    ctx.fillStyle = grayD;
+    roundRect(-32, -bodyH, bodyW, bodyH * 0.5, 12); ctx.fill();
+
+    // 前脚
+    ctx.strokeStyle = grayD; ctx.lineWidth = 7;
+    leg(-18, 14, -legSwing);
+    leg(-26, 14, legSwing);
+
+    // 首・頭（前方右側）
+    ctx.fillStyle = grayL;
+    roundRect(20, -bodyH - 8, 30, 30, 10); ctx.fill();
+    // 耳（立ち耳）
+    ctx.fillStyle = grayD;
+    ctx.beginPath();
+    ctx.moveTo(24, -bodyH - 8); ctx.lineTo(30, -bodyH - 18); ctx.lineTo(36, -bodyH - 6);
+    ctx.closePath(); ctx.fill();
+
+    // マズル＋ヒゲ（シュナウザーの特徴）
+    ctx.fillStyle = beard;
+    ctx.beginPath();
+    ctx.moveTo(44, -bodyH - 4);
+    ctx.lineTo(60, -bodyH + 2);
+    ctx.lineTo(58, -bodyH + 14);
+    ctx.lineTo(44, -bodyH + 12);
+    ctx.closePath(); ctx.fill();
+    // 鼻
+    ctx.fillStyle = "#23262a";
+    ctx.beginPath(); ctx.arc(59, -bodyH + 3, 4, 0, 7); ctx.fill();
+    // 眉毛（もさっと）
+    ctx.fillStyle = beard;
+    ctx.beginPath(); ctx.ellipse(40, -bodyH - 4, 7, 4, -0.3, 0, 7); ctx.fill();
+    // 目
+    ctx.fillStyle = "#1a1c1f";
+    ctx.beginPath(); ctx.arc(42, -bodyH + 2, 2.6, 0, 7); ctx.fill();
+
+    ctx.restore();
+
+    function leg(lx, len, swing) {
+      const sw = swing * 10;
+      ctx.beginPath();
+      ctx.moveTo(lx, -2);
+      ctx.lineTo(lx + sw, len);
+      ctx.stroke();
+    }
+  }
+
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function drawParticles() {
+    for (const p of particles) {
+      const a = 1 - p.t / p.life;
+      ctx.globalAlpha = Math.max(0, a);
+      ctx.fillStyle = p.col;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---- 上の俯瞰マップ ----
+  function drawMap() {
+    // 背景
+    const g = ctx.createLinearGradient(0, mapTop, 0, mapBottom);
+    g.addColorStop(0, "#10243a");
+    g.addColorStop(1, "#16324f");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, mapTop, W, mapH);
+
+    // 枠下線
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.fillRect(0, mapBottom - 2, W, 2);
+
+    const padL = 44, padR = 24;
+    const trackY = mapTop + mapH * 0.62;
+    const x0 = padL, x1 = W - padR;
+    const span = x1 - x0;
+    const worldStart = scroll - 200;
+    const worldEnd = scroll + PREVIEW_AHEAD;
+    const wSpan = worldEnd - worldStart;
+    const toMapX = (wx) => x0 + ((wx - worldStart) / wSpan) * span;
+
+    // タイトル
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.font = "600 12px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("コース先読みマップ ▶", 12, mapTop + 20);
+
+    // トラック（コースのうねり）
+    ctx.strokeStyle = "rgba(255,255,255,0.25)";
+    ctx.lineWidth = 14;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    for (let i = 0; i <= 40; i++) {
+      const wx = worldStart + (wSpan * i / 40);
+      const mx = x0 + span * i / 40;
+      const wob = Math.sin(wx * 0.004) * mapH * 0.10;
+      const my = trackY + wob;
+      if (i === 0) ctx.moveTo(mx, my); else ctx.lineTo(mx, my);
+    }
+    ctx.stroke();
+    // トラック中央線
+    ctx.strokeStyle = "rgba(255,255,255,0.4)";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 7]);
+    ctx.beginPath();
+    for (let i = 0; i <= 40; i++) {
+      const wx = worldStart + (wSpan * i / 40);
+      const mx = x0 + span * i / 40;
+      const my = trackY + Math.sin(wx * 0.004) * mapH * 0.10;
+      if (i === 0) ctx.moveTo(mx, my); else ctx.lineTo(mx, my);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const trackYAt = (wx) => trackY + Math.sin(wx * 0.004) * mapH * 0.10;
+
+    // 「現在地」判定ラインの縦線
+    const nowX = toMapX(scroll);
+    ctx.strokeStyle = "rgba(255,211,77,0.8)";
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(nowX, mapTop + 28); ctx.lineTo(nowX, mapBottom - 6); ctx.stroke();
+    ctx.fillStyle = "rgba(255,211,77,0.9)";
+    ctx.font = "600 10px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("NOW", nowX, mapTop + 26);
+
+    // 障害物アイコン
+    ctx.textAlign = "center";
+    for (const o of obstacles) {
+      if (o.worldX < worldStart || o.worldX > worldEnd) continue;
+      const mx = toMapX(o.worldX);
+      const my = trackYAt(o.worldX);
+      const col = TYPE_COLOR[o.type];
+      const done = o.resolved;
+      ctx.globalAlpha = done ? (o.result === "miss" ? 0.5 : 0.35) : 1;
+      // マーカー
+      ctx.fillStyle = o.resolved && o.result === "miss" ? "#ff5d5d" : col;
+      ctx.beginPath(); ctx.arc(mx, my, 9, 0, 7); ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = "#fff";
+      ctx.font = "700 10px sans-serif";
+      ctx.fillText(TYPE_LABEL[o.type], mx, my + 3.5);
+      ctx.globalAlpha = 1;
+    }
+
+    // 犬のドット（現在地、トラック上）
+    const dy = trackYAt(scroll);
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.arc(nowX, dy, 6, 0, 7); ctx.fill();
+    ctx.fillStyle = "#6f7378";
+    ctx.beginPath(); ctx.arc(nowX, dy, 4, 0, 7); ctx.fill();
+  }
+
+  // ---- HUD ----
+  function drawHUD() {
+    const distM = Math.floor(scroll / PX_PER_METER);
+    ctx.textAlign = "left";
+    // 距離
+    ctx.fillStyle = "#0d2233";
+    ctx.font = "800 20px sans-serif";
+    ctx.fillText(distM + " m", 14, mapBottom + 26);
+
+    // タイマー（中央）
+    ctx.textAlign = "center";
+    const tcol = timeLeft <= 10 ? "#ff5d5d" : "#0d2233";
+    ctx.fillStyle = tcol;
+    ctx.font = "800 22px sans-serif";
+    ctx.fillText(timeLeft.toFixed(1), W / 2, mapBottom + 27);
+    ctx.fillStyle = "rgba(13,34,51,0.6)";
+    ctx.font = "600 10px sans-serif";
+    ctx.fillText("TIME", W / 2, mapBottom + 39);
+
+    // コンボ（右）
+    ctx.textAlign = "right";
+    if (combo > 1) {
+      ctx.fillStyle = "#ff7a1c";
+      ctx.font = "800 20px sans-serif";
+      ctx.fillText(combo + " COMBO", W - 14, mapBottom + 26);
+    }
+
+    // 速度ゲージ
+    const sp = (speed - BASE_SPEED) / (BASE_SPEED * 0.9);
+    const gw = 90, gx = W - 14 - gw, gy = mapBottom + 36;
+    ctx.fillStyle = "rgba(13,34,51,0.15)";
+    roundRect(gx, gy, gw, 6, 3); ctx.fill();
+    ctx.fillStyle = "#ff7a1c";
+    roundRect(gx, gy, gw * Math.max(0, Math.min(1, sp)), 6, 3); ctx.fill();
+  }
+
+  function drawFeedback() {
+    if (feedback.timer <= 0) return;
+    const a = Math.min(1, feedback.timer / 0.4);
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.textAlign = "center";
+    ctx.fillStyle = feedback.color;
+    ctx.font = "800 30px sans-serif";
+    const yy = groundY - playH * 0.32 - (1 - a) * 14;
+    ctx.fillText(feedback.text, dogX, yy);
+    ctx.restore();
+  }
+
+  // ---- flow ----
+  function startGame() {
+    ensureAudio();
+    beep("go");
+    reset();
+    state = "playing";
+    startScreen.classList.add("hidden");
+    overScreen.classList.add("hidden");
+  }
+
+  function gameOver() {
+    state = "over";
+    const distM = Math.floor(scroll / PX_PER_METER);
+    if (distM > best) { best = distM; localStorage.setItem("schnauzer_best", best); }
+    document.getElementById("finalDist").textContent = distM + " m";
+    document.getElementById("finalBest").textContent = "ベスト " + best + " m";
+    document.getElementById("finalStats").textContent =
+      "最大コンボ " + maxCombo + " ／ PERFECT " + perfects;
+    overScreen.classList.remove("hidden");
+  }
+
+  // ---- events ----
+  function onDown(e) {
+    e.preventDefault();
+    ensureAudio();
+    tap();
+  }
+  canvas.addEventListener("pointerdown", onDown, { passive: false });
+  startBtn.addEventListener("pointerdown", (e) => { e.preventDefault(); startGame(); });
+  retryBtn.addEventListener("pointerdown", (e) => { e.preventDefault(); startGame(); });
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "Space" || e.code === "Enter") { e.preventDefault(); ensureAudio(); tap(); }
+  });
+
+  // 初期描画
+  reset();
+  state = "ready";
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
