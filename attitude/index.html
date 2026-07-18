@@ -1,111 +1,23 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-  <meta name="theme-color" content="#07110f">
-  <title>Attitude Portal</title>
-  <style>
-    :root { color-scheme: dark; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    * { box-sizing: border-box; }
-    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #07110f; }
-    body { overscroll-behavior: none; }
-    canvas { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; }
-    .top { position: fixed; z-index: 2; top: 0; left: 0; right: 0; padding: max(18px, env(safe-area-inset-top)) 18px 0; pointer-events: none; }
-    .brand { display: flex; justify-content: space-between; align-items: start; color: #bcffdf; letter-spacing: .14em; font-size: 11px; text-transform: uppercase; }
-    .brand strong { color: #68ffb0; font-size: 15px; letter-spacing: .08em; }
-    .live { display: flex; gap: 7px; align-items: center; }
-    .dot { width: 7px; height: 7px; border-radius: 50%; background: #ffba4a; box-shadow: 0 0 12px #ffba4a; }
-    .live.on .dot { background: #42ff9b; box-shadow: 0 0 12px #42ff9b; }
-    .panel { position: fixed; z-index: 3; left: 14px; right: 14px; bottom: max(14px, env(safe-area-inset-bottom)); padding: 14px; border: 1px solid rgba(94,255,173,.27); border-radius: 18px; background: rgba(4,17,14,.75); backdrop-filter: blur(18px); box-shadow: 0 12px 45px rgba(0,0,0,.35); }
-    .values { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 12px; }
-    .value { min-width: 0; padding: 10px; border-radius: 12px; background: rgba(109,255,182,.07); border: 1px solid rgba(109,255,182,.12); }
-    .label { color: #79ab94; font-size: 9px; letter-spacing: .12em; }
-    .number { margin-top: 4px; color: #d9ffeb; font-size: clamp(18px,6vw,28px); font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .number small { color: #68ffb0; font-size: 10px; }
-    button { width: 100%; min-height: 48px; border: 0; border-radius: 13px; background: #55f5a3; color: #062015; font: 700 13px/1 ui-monospace, monospace; letter-spacing: .06em; }
-    button:active { transform: scale(.985); }
-    .hint { margin: 9px 2px 0; color: #779587; font-size: 10px; line-height: 1.5; text-align: center; }
-    @media (min-width: 720px) { .panel { width: 430px; left: 50%; right: auto; transform: translateX(-50%); } }
-  </style>
-</head>
-<body>
-  <canvas id="view"></canvas>
-  <div class="top">
-    <div class="brand"><strong>ATTITUDE / PORTAL</strong><span class="live" id="live"><i class="dot"></i><span id="status">DEMO</span></span></div>
-  </div>
-  <section class="panel">
-    <div class="values">
-      <div class="value"><div class="label">ALPHA / 方位</div><div class="number"><span id="alpha">0.0</span><small>°</small></div></div>
-      <div class="value"><div class="label">BETA / 前後</div><div class="number"><span id="beta">0.0</span><small>°</small></div></div>
-      <div class="value"><div class="label">GAMMA / 左右</div><div class="number"><span id="gamma">0.0</span><small>°</small></div></div>
-    </div>
-    <button id="start">センサーを開始</button>
-    <div class="hint" id="hint">iPhoneではボタンを押して姿勢センサーを許可してください<br>PCではドラッグして動きを確認できます</div>
-  </section>
-  <script>
-  (() => {
-    const canvas = document.querySelector('#view'), ctx = canvas.getContext('2d');
-    const out = ['alpha','beta','gamma'].map(id => document.querySelector('#'+id));
-    const start = document.querySelector('#start'), live = document.querySelector('#live');
-    const status = document.querySelector('#status'), hint = document.querySelector('#hint');
-    let W=0,H=0,D=1, target={a:0,b:12,g:-16}, pose={...target}, sensor=false, dragging=false, last={x:0,y:0};
-    const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)), rad=d=>d*Math.PI/180;
-
-    function resize(){ D=Math.min(devicePixelRatio||1,2); W=innerWidth; H=innerHeight; canvas.width=W*D; canvas.height=H*D; ctx.setTransform(D,0,0,D,0,0); }
-    addEventListener('resize',resize); resize();
-
-    function orientation(e){
-      if(e.alpha==null) return;
-      sensor=true; target.a=e.alpha||0; target.b=e.beta||0; target.g=e.gamma||0;
-      live.classList.add('on'); status.textContent='LIVE'; start.textContent='センサー動作中';
-    }
-    async function enable(){
-      try {
-        if(typeof DeviceOrientationEvent==='undefined') throw new Error('この端末は姿勢センサーに対応していません');
-        if(typeof DeviceOrientationEvent.requestPermission==='function') {
-          const result=await DeviceOrientationEvent.requestPermission();
-          if(result!=='granted') throw new Error('センサーの使用が許可されませんでした');
-        }
-        addEventListener('deviceorientation',orientation,true);
-        start.textContent='端末をゆっくり傾けてください'; hint.textContent='画面の向きに合わせて奥の空間が動きます';
-      } catch(err) { status.textContent='OFF'; hint.textContent=err.message+'。SafariをHTTPSで開いて再度お試しください。'; }
-    }
-    start.addEventListener('click',enable);
-    canvas.addEventListener('pointerdown',e=>{dragging=true;last={x:e.clientX,y:e.clientY};canvas.setPointerCapture(e.pointerId)});
-    canvas.addEventListener('pointermove',e=>{if(!dragging||sensor)return;target.g=clamp(target.g+(e.clientX-last.x)*.32,-60,60);target.b=clamp(target.b+(e.clientY-last.y)*.25,-35,70);last={x:e.clientX,y:e.clientY}});
-    canvas.addEventListener('pointerup',()=>dragging=false);
-
-    function rotate(p){
-      let {x,y,z}=p, cg=Math.cos(rad(-pose.g)),sg=Math.sin(rad(-pose.g)); [x,y]=[x*cg-y*sg,x*sg+y*cg];
-      let cb=Math.cos(rad(pose.b-18)),sb=Math.sin(rad(pose.b-18)); [y,z]=[y*cb-z*sb,y*sb+z*cb];
-      let ca=Math.cos(rad((pose.a||0)*.12)),sa=Math.sin(rad((pose.a||0)*.12)); [x,z]=[x*ca-z*sa,x*sa+z*ca];
-      return {x,y,z};
-    }
-    function project(p){ const q=rotate(p), f=Math.min(W,H)*1.15, depth=520+q.z, s=f/Math.max(100,depth); return {x:W/2+q.x*s,y:H*.42+q.y*s,s,z:q.z}; }
-    function path(points,close=false){ ctx.beginPath(); points.forEach((p,i)=>{p=project(p);i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)});if(close)ctx.closePath(); }
-
-    function draw(){
-      pose.a+=(target.a-pose.a)*.07; pose.b+=(target.b-pose.b)*.07; pose.g+=(target.g-pose.g)*.07;
-      out[0].textContent=((pose.a%360)+360)%360 < 10 ? '00'+(((pose.a%360)+360)%360).toFixed(1) : (((pose.a%360)+360)%360).toFixed(1);
-      out[1].textContent=(pose.b>=0?'+':'')+pose.b.toFixed(1); out[2].textContent=(pose.g>=0?'+':'')+pose.g.toFixed(1);
-      const grd=ctx.createRadialGradient(W/2,H*.38,10,W/2,H*.4,Math.max(W,H)*.7);grd.addColorStop(0,'#12372c');grd.addColorStop(.45,'#091b16');grd.addColorStop(1,'#030806');ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);
-      const size=Math.min(W*.78,560), half=size/2, z=0;
-      ctx.lineWidth=1; ctx.strokeStyle='rgba(87,255,168,.12)';
-      for(let i=-4;i<=4;i++){let t=i*half/4;path([{x:t,y:-half,z},{x:t,y:half,z}]);ctx.stroke();path([{x:-half,y:t,z},{x:half,y:t,z}]);ctx.stroke();}
-      path([{x:-half,y:-half,z},{x:half,y:-half,z},{x:half,y:half,z},{x:-half,y:half,z}],true);ctx.fillStyle='rgba(31,126,88,.10)';ctx.fill();ctx.strokeStyle='rgba(91,255,174,.75)';ctx.lineWidth=2;ctx.stroke();
-      const R=size*.16, top=-170, bottom=260, seg=56;
-      const ring=y=>Array.from({length:seg+1},(_,i)=>({x:Math.cos(i/seg*Math.PI*2)*R,y,z:Math.sin(i/seg*Math.PI*2)*R}));
-      const back=ring(bottom), rim=ring(top);
-      ctx.fillStyle='rgba(14,79,58,.72)';path([...rim,...back.slice().reverse()],true);ctx.fill();
-      for(let i=0;i<seg;i+=7){path([rim[i],back[i]]);ctx.strokeStyle='rgba(88,255,181,.18)';ctx.lineWidth=1;ctx.stroke();}
-      path(back,true);ctx.fillStyle='rgba(1,13,10,.6)';ctx.fill();ctx.strokeStyle='rgba(89,255,177,.55)';ctx.stroke();
-      path(rim,true);ctx.fillStyle='rgba(3,16,12,.95)';ctx.fill();ctx.strokeStyle='#65ffb0';ctx.lineWidth=3;ctx.shadowColor='#42ff9b';ctx.shadowBlur=14;ctx.stroke();ctx.shadowBlur=0;
-      const center=project({x:0,y:0,z:0});ctx.fillStyle='#8bffbf';ctx.beginPath();ctx.arc(center.x,center.y,3,0,7);ctx.fill();
-      requestAnimationFrame(draw);
-    }
-    draw();
-  })();
-  </script>
-</body>
-</html>
+<meta charset="utf-8"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#06100d"><title>Attitude Portal — 3-Axis</title>
+<style>
+:root{color-scheme:dark;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#06100d}body{overscroll-behavior:none}#view{position:fixed;inset:0;width:100%;height:100%;touch-action:none}.top{position:fixed;z-index:2;top:0;left:0;right:0;padding:max(17px,env(safe-area-inset-top)) 16px 0;pointer-events:none}.brand{display:flex;justify-content:space-between;color:#bcffdf;letter-spacing:.14em;font-size:10px}.brand strong{color:#68ffb0;font-size:14px}.live{display:flex;gap:7px;align-items:center}.dot{width:7px;height:7px;border-radius:50%;background:#ffba4a;box-shadow:0 0 12px #ffba4a}.live.on .dot{background:#42ff9b;box-shadow:0 0 12px #42ff9b}.panel{position:fixed;z-index:3;left:10px;right:10px;bottom:max(10px,env(safe-area-inset-bottom));padding:11px;border:1px solid rgba(94,255,173,.27);border-radius:17px;background:rgba(4,17,14,.84);backdrop-filter:blur(18px);box-shadow:0 12px 45px #0007}.values{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.value{min-width:0;padding:8px;border-radius:11px;background:#6dffb612;border:1px solid #6dffb61f}.label{color:#79ab94;font-size:8px;letter-spacing:.08em}.number{margin-top:3px;color:#d9ffeb;font-size:clamp(17px,5.5vw,25px);font-variant-numeric:tabular-nums;white-space:nowrap}.number small{color:#68ffb0;font-size:9px}.graph-wrap{height:68px;margin:8px 0 9px;border-radius:10px;overflow:hidden;background:#020a08;border:1px solid #6dffb61a}.graph-wrap canvas{width:100%;height:100%}.controls{display:none}.panel.open .controls{display:block}.map{display:grid;grid-template-columns:30px repeat(3,1fr);gap:5px;align-items:center;margin:7px 0}.axis{color:#78ffb5;font-size:10px;text-align:center}.choice{min-height:29px;padding:0;border:1px solid #68ffb02a;border-radius:8px;background:#6dffb60b;color:#78a891;font:700 10px ui-monospace,monospace}.choice.selected{background:#5af1a0;color:#052016;border-color:#5af1a0}.sensitivity{display:flex;align-items:center;gap:10px;margin:9px 2px;color:#82a493;font-size:10px}.sensitivity input{flex:1;accent-color:#55f5a3}.buttons{display:grid;grid-template-columns:1fr auto auto;gap:7px}button{min-height:43px;border:0;border-radius:11px;background:#55f5a3;color:#062015;font:700 12px ui-monospace,monospace;letter-spacing:.04em}.toggle,.reset{width:46px;background:#183d30;color:#8fffc1}.reset{font-size:10px}.hint{margin:7px 2px 0;color:#779587;font-size:9px;text-align:center}@media(min-width:720px){.panel{width:430px;left:50%;right:auto;transform:translateX(-50%)}}
+</style></head>
+<body><canvas id="view"></canvas><div class="top"><div class="brand"><strong>ATTITUDE / PORTAL</strong><span class="live" id="live"><i class="dot"></i><span id="status">DEMO</span></span></div></div>
+<section class="panel" id="panel"><div class="values"><div class="value"><div class="label">ALPHA / 方位</div><div class="number"><span id="alpha">000.0</span><small>°</small></div></div><div class="value"><div class="label">BETA / 前後</div><div class="number"><span id="beta">+00.0</span><small>°</small></div></div><div class="value"><div class="label">GAMMA / 左右</div><div class="number"><span id="gamma">+00.0</span><small>°</small></div></div></div>
+<div class="graph-wrap"><canvas id="graph"></canvas></div><div class="controls"><div class="label">表示軸 ← センサー軸（各行で選択）</div><div id="maps"></div><label class="sensitivity">感度 <input id="gain" type="range" min="10" max="100" value="35"><span id="gainValue">0.35×</span></label></div><div class="buttons"><button id="start">センサーを開始</button><button class="reset" id="reset" aria-label="面を画面に揃える">RESET</button><button class="toggle" id="toggle" aria-label="設定を開く">軸</button></div><div class="hint" id="hint">PCでは画面をドラッグして確認できます</div></section>
+<script>
+(()=>{const cvs=document.querySelector('#view'),ctx=cvs.getContext('2d'),gc=document.querySelector('#graph').getContext('2d'),panel=document.querySelector('#panel'),start=document.querySelector('#start'),status=document.querySelector('#status'),live=document.querySelector('#live'),hint=document.querySelector('#hint'),gain=document.querySelector('#gain'),gainValue=document.querySelector('#gainValue'),outs=['alpha','beta','gamma'].map(x=>document.querySelector('#'+x));let W,H,D,GW,GH,sensor=false,drag=false,last={},raw={a:0,b:0,g:0},zero={a:0,b:0,g:0},demo={a:0,b:12,g:-14},rot={x:0,y:0,z:0},history=[[],[],[]],lastSample=0;const map={x:'b',y:'g',z:'a'},names={a:'α',b:'β',g:'γ'},clamp=(v,a,b)=>Math.max(a,Math.min(b,v)),rad=d=>d*Math.PI/180;
+function resize(){D=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cvs.width=W*D;cvs.height=H*D;ctx.setTransform(D,0,0,D,0,0);const r=document.querySelector('#graph').getBoundingClientRect();GW=r.width;GH=r.height;gc.canvas.width=GW*D;gc.canvas.height=GH*D;gc.setTransform(D,0,0,D,0,0)}addEventListener('resize',resize);resize();
+function makeMaps(){const host=document.querySelector('#maps');['x','y','z'].forEach(axis=>{const row=document.createElement('div');row.className='map';row.innerHTML='<span class="axis">'+axis.toUpperCase()+'</span>'+['a','b','g'].map(s=>'<button class="choice '+(map[axis]===s?'selected':'')+'" data-axis="'+axis+'" data-s="'+s+'">'+names[s]+'</button>').join('');host.append(row)});host.addEventListener('click',e=>{const b=e.target.closest('.choice');if(!b)return;map[b.dataset.axis]=b.dataset.s;host.querySelectorAll('[data-axis="'+b.dataset.axis+'"]').forEach(x=>x.classList.toggle('selected',x===b))})}makeMaps();gain.oninput=()=>gainValue.textContent=(gain.value/100).toFixed(2)+'×';document.querySelector('#toggle').onclick=()=>panel.classList.toggle('open');document.querySelector('#reset').onclick=()=>{if(sensor)zero={...raw};else{demo={a:0,b:0,g:0};zero={a:0,b:0,g:0}}rot={x:0,y:0,z:0};hint.textContent='現在の面を画面に揃えました'};
+function orient(e){if(e.alpha==null)return;sensor=true;raw={a:e.alpha||0,b:e.beta||0,g:e.gamma||0};live.classList.add('on');status.textContent='LIVE';start.textContent='センサー動作中'}async function enable(){try{if(typeof DeviceOrientationEvent==='undefined')throw Error('姿勢センサーに対応していません');if(typeof DeviceOrientationEvent.requestPermission==='function'&&await DeviceOrientationEvent.requestPermission()!=='granted')throw Error('センサーが許可されませんでした');addEventListener('deviceorientation',orient,true);start.textContent='端末を傾けてください';hint.textContent='軸ボタンで対応を変更できます'}catch(e){status.textContent='OFF';hint.textContent=e.message+'。SafariをHTTPSで開いてください'}}start.onclick=enable;
+cvs.onpointerdown=e=>{drag=true;last={x:e.clientX,y:e.clientY};cvs.setPointerCapture(e.pointerId)};cvs.onpointermove=e=>{if(!drag||sensor)return;demo.g=clamp(demo.g+(e.clientX-last.x)*.25,-80,80);demo.b=clamp(demo.b+(e.clientY-last.y)*.22,-80,80);last={x:e.clientX,y:e.clientY}};cvs.onpointerup=()=>drag=false;
+function R(p){let{x,y,z}=p,c=Math.cos(rad(rot.x)),s=Math.sin(rad(rot.x));[y,z]=[y*c-z*s,y*s+z*c];c=Math.cos(rad(rot.y));s=Math.sin(rad(rot.y));[x,z]=[x*c+z*s,-x*s+z*c];c=Math.cos(rad(rot.z));s=Math.sin(rad(rot.z));[x,y]=[x*c-y*s,x*s+y*c];return{x,y,z}}function P(p){const q=R(p),f=Math.min(W,H)*1.25,d=620+q.z,s=f/Math.max(140,d);return{x:W/2+q.x*s,y:H*.39+q.y*s}}function path(ps,close=false){ctx.beginPath();ps.forEach((p,i)=>{p=P(p);i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)});if(close)ctx.closePath()}
+function graph(){gc.clearRect(0,0,GW,GH);gc.strokeStyle='#6dffb617';gc.lineWidth=1;for(let y=GH/4;y<GH;y+=GH/4){gc.beginPath();gc.moveTo(0,y);gc.lineTo(GW,y);gc.stroke()}['#63ffac','#ffcf5a','#65a8ff'].forEach((color,k)=>{const ar=history[k];if(ar.length<2)return;gc.beginPath();ar.forEach((v,i)=>{const x=i/(119)*GW,y=GH/2-clamp(v,-180,180)/180*(GH*.45);i?gc.lineTo(x,y):gc.moveTo(x,y)});gc.strokeStyle=color;gc.lineWidth=1.5;gc.stroke()})}
+function draw(t){const src=sensor?raw:demo,g=+gain.value/100,wrap=a=>((a+180)%360+360)%360-180,relative={a:wrap(src.a-zero.a),b:wrap(src.b-zero.b),g:wrap(src.g-zero.g)},tar={x:relative[map.x]*g,y:relative[map.y]*g,z:relative[map.z]*g};rot.x+=(tar.x-rot.x)*.11;rot.y+=(tar.y-rot.y)*.11;rot.z+=(tar.z-rot.z)*.11;outs[0].textContent=((raw.a%360+360)%360).toFixed(1).padStart(5,'0');outs[1].textContent=(raw.b>=0?'+':'')+raw.b.toFixed(1);outs[2].textContent=(raw.g>=0?'+':'')+raw.g.toFixed(1);if(t-lastSample>45){[raw.a,raw.b,raw.g].forEach((v,i)=>{history[i].push(v);if(history[i].length>120)history[i].shift()});lastSample=t;graph()}
+const grd=ctx.createRadialGradient(W/2,H*.35,10,W/2,H*.4,Math.max(W,H)*.7);grd.addColorStop(0,'#12372c');grd.addColorStop(.5,'#081914');grd.addColorStop(1,'#030806');ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);const size=Math.min(W*.76,H*.46,520),h=size/2;ctx.strokeStyle='#57ffa82a';ctx.lineWidth=1;for(let i=-4;i<=4;i++){let q=i*h/4;path([{x:q,y:-h,z:0},{x:q,y:h,z:0}]);ctx.stroke();path([{x:-h,y:q,z:0},{x:h,y:q,z:0}]);ctx.stroke()}path([{x:-h,y:-h,z:0},{x:h,y:-h,z:0},{x:h,y:h,z:0},{x:-h,y:h,z:0}],true);ctx.fillStyle='#1f7e5818';ctx.fill();ctx.strokeStyle='#5bffaec0';ctx.lineWidth=2;ctx.stroke();
+const radius=size*.16,depth=300,seg=60,ring=z=>Array.from({length:seg+1},(_,i)=>({x:Math.cos(i/seg*Math.PI*2)*radius,y:Math.sin(i/seg*Math.PI*2)*radius,z})),rim=ring(-3),back=ring(depth);ctx.fillStyle='#0e4f3ab8';path([...rim,...back.slice().reverse()],true);ctx.fill();for(let i=0;i<seg;i+=6){path([rim[i],back[i]]);ctx.strokeStyle='#58ffb52e';ctx.lineWidth=1;ctx.stroke()}path(back,true);ctx.fillStyle='#010d0a88';ctx.fill();ctx.strokeStyle='#59ffb18c';ctx.stroke();path(rim,true);ctx.fillStyle='#03100cf2';ctx.fill();ctx.strokeStyle='#65ffb0';ctx.lineWidth=3;ctx.shadowColor='#42ff9b';ctx.shadowBlur=14;ctx.stroke();ctx.shadowBlur=0;requestAnimationFrame(draw)}requestAnimationFrame(draw)})();
+</script></body></html>
