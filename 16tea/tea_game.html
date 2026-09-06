@@ -3,117 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#f6f4e9">
+<meta name="theme-color" content="#f5f2e7">
 <link rel="icon" href="data:,">
-<title>16茶 — ぴったり、ひといき。</title>
-<style>
-:root{color-scheme:light;--paper:#f6f4e9;--ink:#263e32;--muted:#687568;--green:#276346;--line:#dce1d2;--gold:#ae7426}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}body{margin:0;background:var(--paper);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}button{font:inherit;cursor:pointer;touch-action:manipulation}button:focus-visible,summary:focus-visible{outline:3px solid #227bba;outline-offset:3px}button:disabled{cursor:default;opacity:.45}button:not(:disabled):active{transform:translateY(2px)}[hidden]{display:none!important}
-.app{max-width:480px;margin:auto;min-height:100svh;min-height:100dvh;padding:calc(12px + env(safe-area-inset-top)) 20px calc(12px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:12px}header{display:flex;align-items:center;justify-content:space-between}.brand{display:flex;gap:10px;align-items:center}.brand-mark{display:grid;place-items:center;width:42px;height:42px;background:var(--green);color:white;border-radius:14px 4px;font-family:serif;font-size:23px}.brand h1{font-size:21px;margin:0;letter-spacing:.08em}.brand small{font-size:10px;letter-spacing:.09em;color:var(--muted)}.icon-btn{border:1px solid var(--line);border-radius:50%;background:transparent;width:44px;height:44px;font-weight:700;font-size:18px}.journey{border-top:1px solid var(--line);padding-top:12px;display:flex;justify-content:space-between;align-items:center;font-size:12px}.eyebrow{font-size:10px;letter-spacing:.16em;color:var(--muted);font-weight:700}.journey strong{display:block;font-size:15px;margin-top:3px}.record{text-align:right;color:var(--muted);font-size:11px;line-height:1.7}.dots{display:flex;gap:5px;margin-top:7px}.dot{width:24px;height:4px;border-radius:3px;background:#dbe0d2}.dot.done{background:var(--green)}.dot.current{background:#a0b486}
-.stage{flex:1;min-height:206px;display:flex;align-items:center;justify-content:center;gap:24px;background:radial-gradient(ellipse,#e7edda 0,transparent 68%);position:relative}.side-stat{width:70px;text-align:center}.side-stat .number{font-size:38px;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}.side-stat small{color:var(--muted);font-size:11px}.side-stat .unit{font-size:11px;display:block;margin-top:3px;color:var(--muted)}.bottle-scene{width:126px;height:210px;position:relative;display:flex;align-items:flex-end;padding-bottom:10px}.bottle-scene:after{content:"";position:absolute;height:10px;width:140px;bottom:0;left:-7px;border-radius:50%;background:#425d3820}.cap{position:absolute;top:0;left:36px;width:54px;height:22px;background:repeating-linear-gradient(90deg,#42674a 0 5px,#537c55 5px 7px);border-radius:5px 5px 1px 1px}.bottle{position:relative;width:126px;height:184px;border:2px solid #84997d;border-radius:30px 30px 24px 24px;overflow:hidden;background:#ffffff70;box-shadow:inset 5px 0 0 #ffffff80,5px 8px 20px #3b54200c}.bottle:after{content:"";position:absolute;top:24px;bottom:18px;left:9px;width:6px;background:#ffffff55;border-radius:8px;pointer-events:none}.tea-layers{position:absolute;inset:0}.tea-layer{position:absolute;left:0;right:0;border-top:1px solid #ffffff65;transition:height .28s,bottom .28s}.layer-red{background:#cd7d66}.layer-green{background:#82a56d}.layer-blue{background:#79a9b8}.layer-yellow{background:#d6b259}.target-line{position:absolute;top:20%;left:0;right:0;border-top:2px dashed #395642;z-index:1}.target-line span{position:absolute;right:7px;top:-17px;font-size:10px;font-weight:700}.bottle-label{position:absolute;left:18px;right:18px;top:74px;background:#fffaf0e8;border:1px solid #ffffffaa;border-radius:3px;text-align:center;padding:7px 0;transform:rotate(-3deg)}.bottle-label small{font-size:9px;letter-spacing:.15em}.bottle-label strong{display:block;font-size:31px;line-height:1.1;font-family:serif}.bottle-label em{font-size:9px;font-style:normal}.pour{animation:pour .3s ease-out}@keyframes pour{50%{transform:rotate(3deg)}}
-.message{min-height:48px;border-radius:12px;background:#e9eedf;padding:10px 12px;font-size:12px;line-height:1.6;text-align:center;display:grid;place-content:center}.message.warning{background:#faebd7;color:#87531c}.message.success{background:#dfecd9}.selection-heading{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:11px;color:var(--muted);margin-bottom:8px}.selection-heading strong{color:var(--ink);font-size:12px}.tea-buttons{display:grid;grid-template-columns:1fr 1fr;gap:10px}.tea-btn{min-height:82px;display:grid;grid-template-columns:1fr auto;align-items:center;gap:3px 8px;text-align:left;border:1px solid var(--border);border-bottom-width:3px;border-radius:14px;background:var(--bg);color:var(--fg);padding:10px 14px}.tea-btn .name{font-size:15px;font-weight:700}.tea-btn .value{font-size:26px;font-weight:750;line-height:1}.tea-btn .detail{font-size:10px;grid-column:1/-1;min-height:15px}.red{--bg:#f8e9e0;--fg:#95452e;--border:#e8c2b0}.green{--bg:#e6eedf;--fg:#43673a;--border:#bfcfad}.blue{--bg:#e4eff0;--fg:#326976;--border:#b9d4d8}.yellow{--bg:#f6eed5;--fg:#846119;--border:#e2d098}.tea-btn.perfect{outline:2px solid var(--green);outline-offset:1px}.tea-btn.risky{border-style:dashed}.utility{display:grid;grid-template-columns:1.35fr 1fr 1fr;gap:7px;margin-top:10px}.utility button{min-height:46px;border:1px solid var(--line);background:#fffdf6;border-radius:11px;color:var(--ink);font-size:12px}.footer{text-align:center;font-size:10px;color:var(--muted);margin:0;line-height:1.5}.stars{color:var(--gold);letter-spacing:6px;font-size:35px;margin:8px 0}.overlay{position:fixed;inset:0;background:#263e3280;backdrop-filter:blur(6px);z-index:10;display:flex;align-items:center;justify-content:center;padding:18px;overflow-y:auto}.dialog{width:100%;max-width:380px;max-height:calc(100dvh - 36px);overflow-y:auto;background:var(--paper);border:1px solid white;border-radius:24px;padding:26px 24px;box-shadow:0 24px 80px #15261c35;text-align:center}.dialog h2{font-size:26px;margin:10px 0;letter-spacing:.03em}.dialog p{font-size:13px;line-height:1.8;color:var(--muted)}.dialog .hero-mark{margin:auto;color:var(--green);font-family:serif;font-size:52px}.rules{text-align:left;margin:18px 0;padding:0;list-style:none;counter-reset:rule}.rules li{counter-increment:rule;font-size:13px;line-height:1.65;margin:12px 0;padding-left:32px;position:relative}.rules li:before{content:counter(rule);position:absolute;left:0;top:0;width:23px;height:23px;border-radius:50%;background:#e1e9d6;color:var(--green);text-align:center;font-weight:bold}.primary,.secondary{display:block;min-height:48px;width:100%;border-radius:12px;padding:12px;font-weight:700;font-size:14px}.primary{background:var(--green);color:white;border:1px solid var(--green);margin-top:16px}.secondary{background:transparent;border:1px solid var(--line);color:var(--ink);margin-top:8px}.answer{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:15px 0}.chip{background:var(--bg);color:var(--fg);padding:7px 9px;border-radius:8px;font-size:12px;font-weight:700}.solution{font-size:12px;background:#e9eedf;border-radius:10px;padding:12px;line-height:1.7;margin:12px 0}details{text-align:left;font-size:12px;color:var(--muted);line-height:1.7;margin-top:14px}summary{cursor:pointer;min-height:32px}.dialog .small{font-size:11px}.help-top{display:flex;justify-content:space-between;align-items:center}.help-top h2{font-size:23px}.streak{color:var(--green);font-weight:700}
-@media(min-height:860px){.app{gap:16px;padding-top:24px;padding-bottom:24px}.stage{min-height:250px}.bottle-scene{transform:scale(1.15)}.tea-btn{min-height:90px}}
-@media(max-height:740px){.app{gap:8px;padding-top:8px;padding-bottom:8px}.stage{min-height:166px}.bottle-scene{height:210px;transform:scale(.75);transform-origin:center center;margin:-30px 0}.tea-btn{min-height:70px;padding:8px 12px}.journey{padding-top:8px}.message{min-height:42px}.footer{font-size:9px}}
-@media(max-height:590px){.brand small,.dots{display:none}.brand h1{line-height:1.2}.stage{min-height:112px}.bottle-scene{transform:scale(.55);margin:-48px 0}.tea-btn{min-height:64px}.journey{padding-top:6px}.app{gap:6px}.side-stat .number{font-size:32px}}
-@media(max-width:350px){.app{padding-left:12px;padding-right:12px}.stage{gap:14px}.selection-heading{font-size:10px}.utility button{font-size:11px}.dialog{padding:20px 16px}}
-@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
-</style>
+<link rel="stylesheet" href="tea.css">
+<title>16茶 — 十六夜の茶会</title>
 </head>
 <body>
 <main class="app" id="app">
-<header><div class="brand"><div class="brand-mark" aria-hidden="true">茶</div><div><h1>16茶</h1><small>ぴったり、ひといき。</small></div></div><button class="icon-btn" id="help" aria-label="遊び方">?</button></header>
-<section class="journey" aria-label="記録"><div><span class="eyebrow" id="chapter">はじめての茶房</span><strong id="level">練習の一杯</strong><div class="dots" id="dots" aria-hidden="true"></div></div><div class="record"><span id="rank">見習い茶師</span><br><span id="best">最高 0 杯</span> · <span id="score">0 点</span></div></section>
-<section class="stage" aria-label="お茶の量"><div class="side-stat"><small>ぴったりまで</small><div class="number" id="remaining">8</div><span class="unit" id="remainingLabel">あと少し</span></div><div class="bottle-scene" aria-hidden="true"><div class="cap"></div><div class="bottle" id="bottle"><div class="tea-layers" id="layers"></div><div class="target-line"><span>GOAL 16</span></div><div class="bottle-label"><small>本日のブレンド</small><strong id="total">8</strong><em>/ 16</em></div></div></div><div class="side-stat"><small>残り手数</small><div class="number" id="moves">4</div><span class="unit" id="moveLabel">タップで1手</span></div></section>
-<div class="message" id="message" role="status" aria-live="polite"></div>
-<section aria-label="素材茶を選ぶ"><div class="selection-heading"><strong>どのお茶を注ぐ？</strong><span>＋1・＋2・＋3・＋4 が1色ずつ</span></div><div class="tea-buttons" id="teaButtons"></div><div class="utility"><button id="sip">ひとくち −1</button><button id="peek">量を見る <small>1回</small></button><button id="undo">1手戻す</button></div></section>
-<p class="footer">16を超えると失敗。時間制限なし、ゆっくり考えよう。</p>
+ <header><div class="brand"><span class="brand-mark" aria-hidden="true">茶</span><div><h1>16茶</h1><small>十六夜の茶会</small></div></div><div class="header-actions"><button id="mapButton" aria-label="茶会の地図">八席の旅</button><button id="helpButton" class="round" aria-label="遊び方">?</button></div></header>
+ <section class="chapter" aria-label="現在の席"><div><span id="caseNumber" class="eyebrow"></span><h2 id="caseTitle"></h2></div><div id="progress" class="progress" aria-label="茶会の進み具合"></div></section>
+ <section class="rule-card" aria-label="この席のルール"><span class="rule-icon" id="ruleIcon" aria-hidden="true">葉</span><div><strong id="ruleTitle"></strong><p id="ruleDetail"></p></div></section>
+ <section class="stage" aria-label="お茶の量と手数"><div class="stat"><span>16まで、あと</span><strong id="remaining">3</strong><small id="currentLabel">いま 13 / 16</small></div><div class="vessel-wrap" aria-hidden="true"><div class="steam"><i></i><i></i><i></i></div><div class="vessel" id="vessel"><div id="layers" class="layers"></div><div class="target"><span>16</span></div><div class="vessel-seal">十六</div><div id="pourNumber" class="pour-number"></div></div><div class="saucer"></div></div><div class="stat"><span>残り手数</span><strong id="turns">2</strong><small id="pourCounter"></small></div></section>
+ <section class="clue-card" aria-labelledby="clueTitle"><div class="clue-top"><h3 id="clueTitle">茶師の手がかり</h3><span>元の量：1・2・3・4 が1色ずつ</span></div><div id="clues" class="clues"></div><div id="mission" class="mission" hidden></div></section>
+ <div id="message" class="message" role="status" aria-live="polite"></div>
+ <section class="controls" aria-label="お茶の操作"><div class="control-heading"><strong id="actionLabel">お茶を選んで注ぐ</strong><span id="nextEffect"></span></div><div id="teaButtons" class="tea-buttons"></div><div class="utilities"><button id="inspectButton"></button><button id="toolButton" hidden></button><button id="notesButton">注いだ記録</button></div></section>
+ <p class="footer" id="footer">16を超えた瞬間に失敗。時間制限はありません。</p>
 </main>
-<div class="overlay" id="overlay" hidden><section class="dialog" id="dialog" role="dialog" aria-modal="true" aria-labelledby="dialogTitle" tabindex="-1"></section></div>
-<script>
-'use strict';
-const $=id=>document.getElementById(id);
-const COLORS=['red','green','blue','yellow'];
-const NAMES={red:'赤茶',green:'緑茶',blue:'青茶',yellow:'黄茶'};
-const SYMBOLS={red:'◒',green:'❧',blue:'◈',yellow:'✦'};
-const STORAGE='tea16_v2';
-let record={best:0,score:0,played:false};
-try{const saved=JSON.parse(localStorage.getItem(STORAGE)||'null');if(saved){record.best=Math.max(0,Number(saved.best)||0);record.score=Math.max(0,Number(saved.score)||0);record.played=saved.played===true;}}catch{}
-let game,board,lastFocus;
-function save(){try{localStorage.setItem(STORAGE,JSON.stringify(record));}catch{}}
-function shuffled(){const a=[1,2,3,4];for(let i=3;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
-function makeBoard(level,practice){
- if(practice)return{values:{red:2,green:4,blue:3,yellow:1},start:8,moves:4,known:[...COLORS]};
- const vals=shuffled(),values=Object.fromEntries(COLORS.map((c,i)=>[c,vals[i]]));
- const start=4+Math.floor(Math.random()*4),moves=level<=3?6:level<=8?5:4;
- // Always expose one useful ingredient, with room to explore even in later rounds.
- const known=[COLORS[vals.indexOf(level<=3?4:3)]];
- if(level===1)known.push(COLORS[vals.indexOf(1)]);
- return{values,start,moves,known};
-}
-function start(level=1,practice=false,retry=false){
- const score=retry?game.score:(level===1?0:game.score);
- const streak=retry?0:(level===1?0:game.streak);
- if(!retry)board=makeBoard(level,practice);
- game={level,practice,score,streak,total:board.start,moves:board.moves,known:new Set(board.known),layers:[{color:'green',amount:board.start}],history:[],peeked:false,undone:false,assisted:retry,over:false};
- closeDialog();$('bottle').classList.remove('pour');render();
- message(practice?'まずは緑茶「＋4」を2回。8 → 12 → 16を作ってみよう。':`第${level}杯。? のお茶は注ぐと量がわかるよ。`);
-}
-function remainingValues(){return[1,2,3,4].filter(v=>!Array.from(game.known).some(c=>board.values[c]===v));}
-function knownValue(c){return game.known.has(c)||remainingValues().length===1;}
-function rank(n){return n>=20?'伝説の茶師':n>=10?'熟練の茶師':n>=5?'一人前の茶師':'見習い茶師';}
-function render(){
- $('chapter').textContent=game.practice?'はじめての茶房':`${Math.floor((game.level-1)/5)+1}章 · ${game.level<=5?'若葉のブレンド':game.level<=10?'香りの探求':'茶師の腕だめし'}`;
- $('level').textContent=game.practice?'練習の一杯':`第 ${game.level} 杯`;
- $('rank').textContent=rank(record.best);$('best').textContent=`最高 ${record.best} 杯`;$('score').textContent=`${game.score} 点`;
- $('dots').innerHTML=Array.from({length:5},(_,i)=>`<span class="dot ${i<(game.level-1)%5?'done':i===(game.level-1)%5?'current':''}"></span>`).join('');
- $('remaining').textContent=Math.abs(16-game.total);$('remainingLabel').textContent=game.total>16?'オーバー':game.total===16?'できあがり！':'あと少し';$('total').textContent=game.total;$('moves').textContent=game.moves;$('moveLabel').textContent=game.streak>=2?`${game.streak}杯連続！`:'タップで1手';
- let bottom=0;$('layers').replaceChildren();for(const layer of game.layers){const el=document.createElement('div');el.className=`tea-layer layer-${layer.color}`;el.style.bottom=`${bottom*5}%`;el.style.height=`${layer.amount*5}%`;bottom+=layer.amount;$('layers').append(el);}
- const rest=16-game.total,candidates=remainingValues();
- for(const c of COLORS){const btn=$('tea-'+c),visible=knownValue(c),val=board.values[c];const possibilities=visible?[val]:candidates;const safe=possibilities.every(v=>v<=rest),risk=possibilities.every(v=>v>rest);
- btn.disabled=game.over;btn.className=`tea-btn ${c}${visible&&val===rest?' perfect':''}${risk?' risky':''}`;
- btn.querySelector('.value').textContent=visible?'+'+val:'?';
- btn.querySelector('.detail').textContent=visible?(val===rest?'ぴったり！':val>rest?'16を超えるよ':`注ぐと ${game.total+val} / 16`):`候補 ${candidates.map(v=>'+'+v).join(' / ')}${safe?'':' · 超過に注意'}`;
- btn.setAttribute('aria-label',`${NAMES[c]} ${visible?'プラス'+val:'量は未確認'}。${btn.querySelector('.detail').textContent}`);
- }
- $('sip').disabled=game.over||game.total<=0;$('peek').disabled=game.over||game.peeked||COLORS.every(knownValue);$('peek').innerHTML=game.peeked?'確認ずみ':'量を見る <small>1回</small>';$('undo').disabled=game.history.length===0||game.undone||(game.over&&game.total===16);
-}
-function message(text,type=''){$('message').textContent=text;$('message').className='message '+type;}
-function act(color){
- if(game.over||!$('overlay').hidden||game.moves<=0||(!color&&game.total<=0))return;
- game.history.push({total:game.total,moves:game.moves,layers:game.layers.map(l=>({...l}))});
- if(color){game.total+=board.values[color];game.known.add(color);game.layers.push({color,amount:board.values[color]});}else{game.total--;const top=game.layers[game.layers.length-1];if(--top.amount===0)game.layers.pop();}
- game.moves--;render();$('bottle').classList.remove('pour');void $('bottle').offsetWidth;$('bottle').classList.add('pour');
- if(game.total===16){finish(true);return;}if(game.total>16||game.moves===0){finish(false);return;}
- const rem=16-game.total;
- message(game.practice?(game.total===12?'いい感じ！緑茶「＋4」をもう1回で、16ぴったり。':`あと${rem}。わかっている量を組み合わせよう。`):`${color?NAMES[color]+'は ＋'+board.values[color]:'ひとくち飲んで −1'}。あと ${rem}${remainingValues().length===1?'。最後の色の量も確定！':'。'}`,rem<=3?'warning':'');
-}
-function undo(){if(game.undone||!game.history.length||(game.over&&game.total===16))return;Object.assign(game,game.history.pop());game.undone=true;game.assisted=true;game.over=false;closeDialog();render();message('1手戻したよ。見つけた量はそのまま、別の一手を試そう。');}
-function solve(total,moves){const queue=[{total,path:[]}],seen=new Set([total]);for(let i=0;i<queue.length;i++){const s=queue[i];if(s.total===16)return s.path;if(s.path.length>=moves)continue;for(const c of [...COLORS,null]){const next=s.total+(c?board.values[c]:-1);if(next<0||next>16||seen.has(next))continue;seen.add(next);queue.push({total:next,path:[...s.path,c]});}}return null;}
-function peek(){
- if(game.over||game.peeked||!$('overlay').hidden)return;
- const path=solve(game.total,game.moves)||[];
- const c=path.find(c=>c&&!knownValue(c))||COLORS.find(c=>!knownValue(c));if(!c)return;
- game.known.add(c);game.peeked=true;game.assisted=true;render();message(`${NAMES[c]}は ＋${board.values[c]}！ 手数を使わず確認できたよ。`);
-}
-function finish(won){
- game.over=true;let earned=0,stars=0;
- if(won){stars=game.assisted?1:game.moves>=2?3:2;if(!game.practice){game.streak++;earned=stars*100+game.moves*20+(game.streak-1)*25;game.score+=earned;record.best=Math.max(record.best,game.level);record.score=Math.max(record.score,game.score);record.played=true;save();}}else game.streak=0;
- render();
- const path=solve(board.start,board.moves);
- const recipe=path?path.map(c=>c?`${NAMES[c]} +${board.values[c]}`:'飲む −1').join(' → '):'';
- openDialog(`<span class="eyebrow">${won?'BLEND COMPLETE':'もう一度、ひといき。'}</span><h2 id="dialogTitle">${won?'16ぴったり！':game.total>16?`${game.total-16}だけ多かった…`:'あと一歩、手数切れ'}</h2>${won?`<div class="stars" aria-label="星${stars}つ">${'★'.repeat(stars)}${'☆'.repeat(3-stars)}</div>`:''}<p>${game.practice?(won?'これで基本はばっちり。次は隠れた量を探してみよう。':'大丈夫。もう一度、緑茶を2回注いでみよう。'):won?`第${game.level}杯 完成 · ＋${earned}点<br>${game.level%5===0?`${rank(game.level)}の腕前！ 次の章へ。`:'この調子で、次のブレンドへ。'}`:'量を覚えたら、もう一度。同じ配合で挑戦できるよ。'}</p><div class="answer">${COLORS.map(c=>`<span class="chip ${c}">${NAMES[c]} +${board.values[c]}</span>`).join('')}</div>${!won?`<details><summary>この問題の正解例を見る</summary><div class="solution">${board.start} から ${recipe} → 16</div></details>`:`<p class="small">${game.assisted?'サポートを使って完成！':game.moves>=2?'2手以上残して、三つ星ブレンド。':'サポートなしで、二つ星ブレンド。'}</p>`}<button class="primary" id="resultPrimary">${won?(game.practice?'本番の一杯を作る':'次の一杯へ'):'同じ問題をもう一度'}</button>${!won&&!game.undone&&game.history.length?'<button class="secondary" id="resultUndo">1手戻して続ける</button>':''}<button class="secondary" id="resultHome">茶房の入口へ</button>`);
- $('resultPrimary').onclick=()=>won?start(game.practice?1:game.level+1,false):start(game.level,game.practice,true);
- if($('resultUndo'))$('resultUndo').onclick=undo;$('resultHome').onclick=welcome;
-}
-function openDialog(html){lastFocus=document.activeElement;$('dialog').innerHTML=html;$('overlay').hidden=false;$('app').inert=true;$('dialog').focus();}
-function closeDialog(){$('overlay').hidden=true;$('app').inert=false;if(lastFocus&&lastFocus.isConnected)lastFocus.focus();}
-const rules=`<ol class="rules"><li>お茶を注いで、合計を<strong>16ぴったり</strong>に。16を超えると失敗です。</li><li>4色の量は<strong>＋1・＋2・＋3・＋4が1つずつ</strong>。? は注ぐと判明。同じ杯の中では量は変わりません。</li><li>注ぐ・飲むは<strong>1手</strong>。困ったら「量を見る」「1手戻す」を各1回使えます。</li></ol>`;
-function welcome(){openDialog(`<div class="hero-mark" aria-hidden="true">十六茶</div><span class="eyebrow">A LITTLE TEA PUZZLE</span><h2 id="dialogTitle">ぴったり、ひといき。</h2><p>隠れた量を見つけて、あなただけの一杯を。<br>1杯30秒から。時間制限はありません。</p>${rules}<button class="primary" id="begin">${record.played?'新しく一杯目から遊ぶ':'まずは2タップで練習'}</button><button class="secondary" id="skip">${record.played?'練習でもう一度おさらい':'練習をとばして遊ぶ'}</button><p class="small">自己ベスト ${record.best}杯 / ${record.score}点</p>`);$('begin').onclick=()=>start(1,!record.played);$('skip').onclick=()=>start(1,record.played);}
-function help(){openDialog(`<div class="help-top"><h2 id="dialogTitle">おいしい一杯の作り方</h2></div>${rules}<div class="solution">例：いま13なら、＋3で完成。<br>＋4しかわからなくても、先に1飲んで12にすると、＋4で16！</div><p class="small">次の杯では配合が変わります。<br>★ 完成 ／ ★★ サポートなし ／ ★★★ さらに2手以上残す<br>再挑戦はサポートありの評価になります。</p><button class="primary" id="resume">お茶づくりに戻る</button>`);$('resume').onclick=closeDialog;}
-for(const c of COLORS){const btn=document.createElement('button');btn.id='tea-'+c;btn.className=`tea-btn ${c}`;btn.innerHTML=`<span class="name"><span aria-hidden="true">${SYMBOLS[c]}</span> ${NAMES[c]}</span><span class="value"></span><span class="detail"></span>`;btn.onclick=()=>act(c);$('teaButtons').append(btn);}
-$('sip').onclick=()=>act(null);$('peek').onclick=peek;$('undo').onclick=undo;$('help').onclick=help;
-document.addEventListener('keydown',event=>{if($('overlay').hidden)return;if(event.key==='Escape'&&$('resume')){closeDialog();return;}if(event.key==='Tab'){const focusable=Array.from($('dialog').querySelectorAll('button,summary'));const first=focusable[0],last=focusable[focusable.length-1];if(event.shiftKey&&(document.activeElement===first||document.activeElement===$('dialog'))){event.preventDefault();last.focus();}else if(!event.shiftKey&&(document.activeElement===last||document.activeElement===$('dialog'))){event.preventDefault();first.focus();}}});
-start(1,true);welcome();
-</script>
+<div class="overlay" id="overlay" hidden><section id="dialog" class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialogTitle" tabindex="-1"></section></div>
+<script src="game-core.js"></script><script src="game.js"></script>
 </body>
 </html>
