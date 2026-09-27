@@ -1,4 +1,4 @@
-import * as THREE from '../vendor/three.module.js';
+import * as THREE from '../vendor/three.module.js?v=20260927e';
 
 export class CoinRenderer {
   constructor(canvas) {
@@ -116,3 +116,7 @@ export class CoinRenderer {
 
   dispose() { removeEventListener('resize', this.resize); }
 }
+
+
+
+

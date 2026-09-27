@@ -1,51 +1,64 @@
 <!doctype html>
-<html lang="en">
+<html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-  <meta name="theme-color" content="#080b12">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Nexus WebGPU Coin Benchmark</title>
   <link rel="icon" href="data:,">
-  <title>Box3D Coin Benchmark</title>
-  <link rel="stylesheet" href="./src/style.css">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #081014; }
+    canvas { width: 100% !important; height: 100% !important; display: block; }
+    #status { position: fixed; inset: 0; display: grid; place-content: center; gap: 14px; padding: 24px;
+      color: #d7e4e8; background: radial-gradient(circle at 50% 42%, #18333b, #081014 62%);
+      font: 500 15px/1.55 system-ui, sans-serif; text-align: center; z-index: 10; }
+    #status.error { color: #ffb4ab; }
+    .spinner { width: 36px; height: 36px; margin: auto; border: 3px solid #31505a;
+      border-top-color: #55d6e2; border-radius: 50%; animation: spin .8s linear infinite; }
+    #telemetry { position: fixed; right: 12px; bottom: 12px; z-index: 5; padding: 8px 11px; border: 1px solid #31505a;
+      border-radius: 7px; background: #081014cc; color: #bcecf0; font: 600 13px/1.35 ui-monospace, monospace; pointer-events: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
 </head>
 <body>
-  <canvas id="viewport"></canvas>
-  <aside id="panel">
-    <header><h1>Box3D Coin Bench</h1><span id="status" class="loading">Loading WASM…</span></header>
-    <div class="actions">
-      <button id="start" class="primary">Start</button><button id="pause">Pause</button><button id="reset">Reset</button>
-    </div>
-    <label>Coin count <select id="coinCount"><option>100</option><option>250</option><option>500</option><option selected>1000</option><option>2000</option><option>3000</option><option>5000</option><option>7500</option><option>10000</option></select></label>
-    <label>Benchmark mode <select id="mode"><option value="both">Render + Physics</option><option value="physics">Physics Only</option><option value="render">Render Only</option></select></label>
-    <label>Spawn mode <select id="spawnMode"><option value="0">Rain</option><option value="1" selected>Dense Stack</option></select></label>
-    <div class="grid">
-      <label>Hull sides <select id="segments"><option>8</option><option>12</option><option selected>16</option><option>24</option></select></label>
-      <label>Pixel ratio <select id="pixelRatio"><option value="0.5">0.5</option><option value="1">1.0</option><option value="device" selected>Device (≤1.5)</option></select></label>
-      <label>Gravity <input id="gravity" type="number" value="-9.8" step="0.1"></label>
-      <label>Friction <input id="friction" type="number" value="0.5" min="0" max="1" step="0.05"></label>
-      <label>Restitution <input id="restitution" type="number" value="0.05" min="0" max="1" step="0.05"></label>
-      <label>Radius <input id="radius" type="number" value="0.5" min="0.1" max="1" step="0.05"></label>
-      <label>Thickness <input id="thickness" type="number" value="0.10" min="0.03" max="0.5" step="0.01"></label>
-      <label>Seed <input id="seed" type="number" value="1337" step="1"></label>
-    </div>
-    <div class="checks">
-      <label><input id="renderCoins" type="checkbox" checked> Render coins</label>
-      <label><input id="shadows" type="checkbox"> Shadows</label>
-      <label><input id="wireframe" type="checkbox"> Wireframe</label>
-      <label><input id="pusher" type="checkbox"> Pusher</label>
-      <label><input id="recycle" type="checkbox" checked> Recycle fallen</label>
-    </div>
-    <button id="apply" class="wide">Apply & rebuild world</button>
-    <div class="actions bench-actions"><button id="auto" class="primary">Auto Benchmark</button><button id="cancelAuto" disabled>Cancel</button><button id="csv" disabled>Download CSV</button></div>
-    <div id="autoProgress" aria-live="polite"></div>
-    <details><summary>Results</summary><div class="table-wrap"><table><thead><tr><th>Coins</th><th>Sides</th><th>FPS</th><th>1% low</th><th>Physics ms</th><th>Max ms</th></tr></thead><tbody id="results"></tbody></table></div></details>
-    <details><summary>Device</summary><pre id="device"></pre></details>
-  </aside>
-  <section id="overlay" aria-live="polite"></section>
-  <button id="togglePanel" aria-label="Toggle controls">☰</button>
-  <div id="fatal" hidden></div>
-  <script src="./wasm/box3d_bridge.js"></script>
-  <script type="module" src="./src/main.js"></script>
+  <div id="status"><div>Nexus WebGPUを読み込み中…<br>初回はGPUシェーダーの準備に時間がかかります。</div><div class="spinner"></div></div>
+  <div id="telemetry">Web FPS --</div>
+  <script type="module">
+    const CACHE_VERSION = '20260927062118';
+    const status = document.getElementById('status');
+    const telemetry = document.getElementById('telemetry');
+    const frameSamples = [];
+    let previousFrame = performance.now();
+    const sampleFrame = (now) => {
+      const dt = now - previousFrame;
+      previousFrame = now;
+      if (dt > 0 && dt < 1000) {
+        frameSamples.push(dt);
+        if (frameSamples.length > 120) frameSamples.shift();
+        const averageMs = frameSamples.reduce((sum, value) => sum + value, 0) / frameSamples.length;
+        const fps = 1000 / averageMs;
+        window.webFrameStats = { fps, frameMs: averageMs, samples: frameSamples.length };
+        telemetry.textContent = `Web FPS ${fps.toFixed(1)} | ${averageMs.toFixed(2)} ms`;
+      }
+      requestAnimationFrame(sampleFrame);
+    };
+    requestAnimationFrame(sampleFrame);
+    const fail = (message) => { status.className = 'error'; status.innerHTML = message; };
+    const isChromium = /Chrome|Chromium|Edg\//.test(navigator.userAgent);
+    if (!isChromium) {
+      fail('このベンチマークはPC版Chrome / Edge専用です。');
+    } else if (!navigator.gpu) {
+      fail('WebGPUを利用できません。Chrome / Edgeを更新し、GPUアクセラレーションを有効にしてください。');
+    } else {
+      import(`./pkg/nexus_coin_benchmark.js?v=${CACHE_VERSION}`)
+        .then(({ default: init }) => init())
+        .then(() => { status.style.display = 'none'; })
+        .catch((error) => {
+          console.error(error);
+          fail(`起動に失敗しました。<br><small>${String(error.message || error)}</small>`);
+        });
+    }
+  </script>
 </body>
 </html>
-

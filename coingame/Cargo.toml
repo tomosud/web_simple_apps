@@ -1,0 +1,30 @@
+[package]
+name = "nexus_coin_benchmark"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "nexus_coin_benchmark"
+path = "rust/main.rs"
+
+[dependencies]
+anyhow = "1"
+env_logger = "0.11"
+glamx = "0.3"
+getrandom = { version = "0.2", features = ["js"] }
+khal = "0.3"
+kiss3d = { version = "0.46.0", features = ["egui", "rt_switcher"] }
+nexus3d = { version = "0.5.0", features = ["rbd"] }
+nexus_viewer3d = "0.5.0"
+rapier3d = { version = "0.35.2", features = ["bytemuck"] }
+web-time = "1"
+web-sys = { version = "0.3", features = ["Window", "Document", "Element"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+opt-level = 3
+
+
+

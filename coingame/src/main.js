@@ -1,9 +1,9 @@
-import { CoinRenderer } from './renderer.js';
-import { Metrics, AutoBenchmark, downloadCsv } from './benchmark.js';
-import { createUI, deviceInfo, renderOverlay } from './ui.js';
+import { CoinRenderer } from './renderer.js?v=20260927e';
+import { Metrics, AutoBenchmark, downloadCsv } from './benchmark.js?v=20260927e';
+import { createUI, deviceInfo, renderOverlay } from './ui.js?v=20260927e';
 
 const FIXED_DT = 1 / 60;
-const MAX_SUB_STEPS = 4;
+const MAX_SUB_STEPS = 1;
 const ui = createUI();
 const device = deviceInfo();
 ui.el.device.textContent = JSON.stringify(device, null, 2);
@@ -33,7 +33,7 @@ function refreshViews(syncTransforms = true) {
 function rebuild(next = ui.read()) {
   settings = next;
   const ok = module._reset_world(settings.coinCount, settings.gravity, settings.friction, settings.restitution,
-    settings.radius, settings.thickness, settings.segments, settings.spawnMode, Number(settings.pusher),
+    settings.radius, settings.thickness, settings.segments, settings.colliderType, settings.solverSubSteps, Number(settings.continuous), Number(settings.lockTilt), settings.spawnMode, Number(settings.pusher),
     Number(settings.recycle), settings.seed);
   if (!ok) throw new Error('Box3D rejected the world settings or could not allocate memory.');
   renderer.rebuild(settings.coinCount, settings.radius, settings.thickness);
@@ -102,7 +102,7 @@ function frame(now) {
     const recent = liveMetrics.summary(120);
     const total = liveMetrics.summary();
     renderOverlay(ui.el.overlay, {
-      ...recent, running, coins: settings.coinCount, bodies: Math.round(statsView[0]), awake: Math.round(statsView[1]),
+      ...recent, running, coins: settings.coinCount, bodies: Math.round(statsView[0]), awake: Math.round(statsView[1]), contacts: Math.round(statsView[3]),
       avgFps: total.fps, totalAvgPhysics: total.avgPhysicsMs, maxPhysicsMs: total.maxPhysicsMs,
     });
     lastOverlay = now;
@@ -110,13 +110,13 @@ function frame(now) {
 }
 
 function appendResult(coinCount, summary) {
-  const result = { coinCount, hullSides: settings.segments, avgFps: summary.fps, minFps: summary.minFps,
+  const result = { coinCount, colliderType: settings.colliderType === 1 ? 'Flat Box' : 'Prism Hull', hullSides: settings.segments, solverSubSteps: settings.solverSubSteps, avgFps: summary.fps, minFps: summary.minFps,
     onePercentLow: summary.onePercentLow, avgFrameMs: summary.frameMs,
     avgPhysicsMs: summary.avgPhysicsMs, maxPhysicsMs: summary.maxPhysicsMs };
   results.push(result);
   const row = ui.el.results.insertRow();
-  [coinCount, settings.segments, summary.fps, summary.onePercentLow, summary.avgPhysicsMs, summary.maxPhysicsMs]
-    .forEach((value, index) => { const cell = row.insertCell(); cell.textContent = index < 2 ? value : value.toFixed(2); });
+  [coinCount, result.colliderType, settings.segments, settings.solverSubSteps, summary.fps, summary.onePercentLow, summary.avgPhysicsMs, summary.maxPhysicsMs]
+    .forEach((value, index) => { const cell = row.insertCell(); cell.textContent = index < 4 ? value : value.toFixed(2); });
   ui.el.csv.disabled = false;
 }
 
@@ -157,7 +157,7 @@ function bindEvents() {
 
 async function boot() {
   if (typeof window.createBox3DModule !== 'function') throw new Error('wasm/box3d_bridge.js was not found. Run scripts/build_wasm.bat.');
-  module = await window.createBox3DModule({ locateFile: file => new URL(`../wasm/${file}`, import.meta.url).href });
+  module = await window.createBox3DModule({ locateFile: file => new URL(`../wasm/${file}`, import.meta.url).href + '?v=20260927e' });
   if (!module._init_world()) throw new Error('Box3D bridge failed to initialize.');
   renderer = new CoinRenderer(document.getElementById('viewport'));
   settings = ui.read();
@@ -173,4 +173,8 @@ boot().catch(error => {
   ui.el.fatal.hidden = false;
   ui.el.fatal.textContent = `${error.message}\n\nServe this folder over HTTP using run.bat; file:// is not supported.`;
 });
+
+
+
+
 

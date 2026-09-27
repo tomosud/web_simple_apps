@@ -1,4 +1,7 @@
+target/
+.tools/
 build-wasm/
 .emscripten/
+.playwright-cli/
 *.log
 .DS_Store

@@ -72,9 +72,9 @@ export class AutoBenchmark {
 }
 
 export function downloadCsv(results, device) {
-  const columns = ['device','userAgent','coinCount','hullSides','physicsHz','durationSec','avgFps','minFps','onePercentLow','avgFrameMs','avgPhysicsMs','maxPhysicsMs'];
+  const columns = ['device','userAgent','coinCount','colliderType','hullSides','solverSubSteps','physicsHz','durationSec','avgFps','minFps','onePercentLow','avgFrameMs','avgPhysicsMs','maxPhysicsMs'];
   const quote = value => `"${String(value).replaceAll('"', '""')}"`;
-  const rows = results.map(r => [device.platform, device.userAgent, r.coinCount, r.hullSides, 60, 10, r.avgFps, r.minFps, r.onePercentLow, r.avgFrameMs, r.avgPhysicsMs, r.maxPhysicsMs]);
+  const rows = results.map(r => [device.platform, device.userAgent, r.coinCount, r.colliderType, r.hullSides, r.solverSubSteps, 60, 10, r.avgFps, r.minFps, r.onePercentLow, r.avgFrameMs, r.avgPhysicsMs, r.maxPhysicsMs]);
   const csv = [columns, ...rows].map(row => row.map(quote).join(',')).join('\r\n');
   const now = new Date();
   const pad = n => String(n).padStart(2, '0');
@@ -83,3 +83,5 @@ export function downloadCsv(results, device) {
   const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+

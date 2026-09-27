@@ -1,41 +1,58 @@
-# Box3D WebAssembly Coin Benchmark
+# Nexus WebGPU Coin Benchmark
 
-A static browser benchmark for measuring large stacks of thin 3D rigid-body coins. Physics runs in the official Box3D C17 library compiled to WebAssembly; Three.js renders the coins with a single `InstancedMesh`.
+PC版Chrome / Edge向けのNexus 0.5.0 GPU rigid-bodyベンチマークです。初期シーンは10,000枚の薄いネイティブCylinderです。物理計算、姿勢同期、インスタンス描画を同じWebGPUデバイス上で実行し、CPU readbackを避けます。
 
-The vendored engine is **Box3D v0.1.0** from <https://github.com/erincatto/box3d> (MIT). The browser renderer is **Three.js r180** (MIT). The benchmark itself is intentionally dependency-free at runtime beyond the checked-in static files.
+## 実行
 
-## Run
+`run.bat` をダブルクリックしてください。8000番から空いているポートを自動選択し、ブラウザを開きます。ページ左側のExamplesから1,000 / 2,000 / 5,000 / 10,000枚を切り替えられます。右上にFPS、frame time、GPU physics time、CPU encoding timeを表示します。
 
-Double-click `run.bat`, then open <http://localhost:8000>. Do not open `index.html` with `file://`; browsers restrict WebAssembly loading from local files.
+要件:
 
-Use **Apply & rebuild world** after changing physics settings. `Start`, `Pause`, and `Reset` control the current case. `Auto Benchmark` runs 500–10,000 coins with a 5-second warmup and 10-second measurement per case, then enables CSV download.
+- Windows 10/11
+- PC版ChromeまたはEdge（WebGPU有効）
+- Python 3（ローカルサーバー用）
 
-For comparable results, keep the tab visible, close other heavy tabs, keep power/thermal conditions consistent, and record pixel ratio, render mode, spawn mode, and hull sides alongside the CSV.
+Safari/iPhone、Firefox、WebGLフォールバックは対象外です。
 
-## Rebuild WebAssembly
+## シーン
 
-Prerequisites:
+- Nexus 0.5.0 / WebGPU backend
+- 共有された解析的Cylinder collider（radius 0.5、thickness 0.1）
+- Dense stack、seed固定の微小jitter
+- X/Z傾斜をロック、Y軸回転は有効
+- 1 physics step / rendered frame
+- floor + 4 walls
+- 初期値10,000 coins
 
-- Git (only required if replacing the vendored Box3D source)
-- CMake 3.21+
-- Emscripten SDK, activated with `emsdk_env.bat`
-- Python 3 for the local server
+## 再ビルド
 
-From an Emscripten-enabled command prompt:
+初回のみRust-GPU環境を準備します。
 
-```bat
-scripts\build_wasm.bat
+```powershell
+cargo install cargo-gpu --version 0.10.0-alpha.1
+cargo gpu install
+rustup target add wasm32-unknown-unknown --toolchain nightly-2026-04-11
 ```
 
-This follows Box3D's official web build flow (`emcmake cmake ...`, then `cmake --build`) and writes `wasm/box3d_bridge.js` plus `wasm/box3d_bridge.wasm`. SIMD behavior is left to Box3D's CMake configuration; this project does not force custom SIMD flags.
+その後:
 
-## Design notes
+```bat
+scripts\build_nexus.bat
+```
 
-- A seeded xorshift generator makes initial positions repeatable.
-- The coin convex hull is computed once per world and reused as the source of all coin shapes.
-- JavaScript makes one transform-buffer bridge call per rendered physics frame, then reads packed transforms directly from WASM memory.
-- Physics uses a 60 Hz accumulator capped at four steps per display frame.
-- Rendering uses one `THREE.InstancedMesh`; per-instance transforms reuse temporary objects.
-- The safety cap is 10,000 dynamic coins.
+ビルドは`wasm-bindgen-cli`のCargo.lock一致版をプロジェクト内`.tools/`へ自動導入し、`pkg/`を生成します。完了時に`index.html`とWASM URLのキャッシュバスターもUTC時刻へ更新します。`pkg/`はGitHub Pages向けのビルド済み成果物です。
 
-Box3D is young and its API may change. The bridge targets the checked-in v0.1.0 headers, which are the source of truth for this repository.
+## 構成
+
+- `rust/main.rs`: Nexus physics scene、GPU計測、UI
+- `pkg/`: GitHub Pagesで配信する生成済みJS/WASM
+- `scripts/build_nexus.ps1`: 再現ビルド
+- `scripts/bump_cache_buster.ps1`: JS/WASMキャッシュ更新
+- `scripts/serve.py`: 空きポート選択、no-storeローカルサーバー
+- `box3d_wasm_coin_benchmark_spec_old.md`: 旧Box3D仕様（参照用）
+
+旧Box3Dソース／ビルド資産は移行の比較用に残していますが、`index.html`からは一切参照されず、実行版はNexus専用です。
+
+## 既知の制約
+
+Nexusは開発途上です。ブラウザ起動時のGPUパイプライン作成に時間がかかります。生成WASMは最適化前で約28MBです。10,000枚・60FPS達成可否はGPUとブラウザのWebGPU実装に依存します。

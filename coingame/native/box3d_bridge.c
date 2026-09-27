@@ -15,6 +15,7 @@ static int g_coin_count;
 static int g_paused;
 static int g_recycle;
 static int g_pusher_enabled;
+static int g_solver_substeps;
 static float g_time;
 static float g_radius;
 static float g_thickness;
@@ -60,7 +61,7 @@ EMSCRIPTEN_KEEPALIVE void destroy_world(void)
 }
 
 EMSCRIPTEN_KEEPALIVE int reset_world(int coin_count, float gravity, float friction, float restitution,
-	float radius, float thickness, int segments, int spawn_mode, int pusher_enabled, int recycle, int seed)
+	float radius, float thickness, int segments, int collider_type, int solver_substeps, int enable_continuous, int lock_tilt, int spawn_mode, int pusher_enabled, int recycle, int seed)
 {
 	destroy_world();
 	if (coin_count < 1 || coin_count > MAX_COINS || segments < 8 || segments > 24)
@@ -73,6 +74,7 @@ EMSCRIPTEN_KEEPALIVE int reset_world(int coin_count, float gravity, float fricti
 	g_thickness = thickness;
 	g_recycle = recycle;
 	g_pusher_enabled = pusher_enabled;
+	g_solver_substeps = solver_substeps < 1 ? 1 : (solver_substeps > 4 ? 4 : solver_substeps);
 	g_rng = seed == 0 ? 1u : (uint32_t)seed;
 	g_time = 0.0f;
 	g_paused = 0;
@@ -86,6 +88,7 @@ EMSCRIPTEN_KEEPALIVE int reset_world(int coin_count, float gravity, float fricti
 
 	b3WorldDef world_def = b3DefaultWorldDef();
 	world_def.gravity = (b3Vec3){0.0f, gravity, 0.0f};
+	world_def.enableContinuous = enable_continuous != 0;
 	world_def.capacity.dynamicBodyCount = coin_count + 1;
 	g_world = b3CreateWorld(&world_def);
 
@@ -107,23 +110,34 @@ EMSCRIPTEN_KEEPALIVE int reset_world(int coin_count, float gravity, float fricti
 		b3CreateHullShape(g_pusher, &pusher_shape, &pusher_box.base);
 	}
 
-	// The expensive hull computation happens once. b3CreateHullShape copies this shared source for every body.
-	b3Vec3 points[48];
-	for (int i = 0; i < segments; ++i)
+	// Both collider sources are built once and copied into each body's shape.
+	b3HullData* allocated_hull = NULL;
+	b3BoxHull coin_box;
+	const b3HullData* coin_hull = NULL;
+	if (collider_type == 1)
 	{
-		float angle = 6.28318530718f * (float)i / (float)segments;
-		float x = radius * cosf(angle);
-		float z = radius * sinf(angle);
-		points[i] = (b3Vec3){x, -0.5f * thickness, z};
-		points[i + segments] = (b3Vec3){x, 0.5f * thickness, z};
+		coin_box = b3MakeBoxHull(radius, 0.5f * thickness, radius);
+		coin_hull = &coin_box.base;
 	}
-	b3HullData* coin_hull = b3CreateHull(points, segments * 2, segments * 2);
+	else
+	{
+		b3Vec3 points[48];
+		for (int i = 0; i < segments; ++i)
+		{
+			float angle = 6.28318530718f * (float)i / (float)segments;
+			float x = radius * cosf(angle);
+			float z = radius * sinf(angle);
+			points[i] = (b3Vec3){x, -0.5f * thickness, z};
+			points[i + segments] = (b3Vec3){x, 0.5f * thickness, z};
+		}
+		allocated_hull = b3CreateHull(points, segments * 2, segments * 2);
+		coin_hull = allocated_hull;
+	}
 	if (coin_hull == NULL)
 	{
 		destroy_world();
 		return 0;
 	}
-
 	b3ShapeDef coin_shape = b3DefaultShapeDef();
 	coin_shape.density = 1000.0f;
 	coin_shape.baseMaterial.friction = friction;
@@ -144,12 +158,13 @@ EMSCRIPTEN_KEEPALIVE int reset_world(int coin_count, float gravity, float fricti
 			: 0.08f + layer * (thickness * 1.12f);
 		b3BodyDef body_def = b3DefaultBodyDef();
 		body_def.type = b3_dynamicBody;
+		if (lock_tilt) { body_def.motionLocks.angularX = true; body_def.motionLocks.angularZ = true; }
 		body_def.position = (b3Pos){x, y, z};
 		body_def.rotation = b3MakeQuatFromAxisAngle(b3Vec3_axisY, random01() * 6.28318530718f);
 		g_coins[i] = b3CreateBody(g_world, &body_def);
 		b3CreateHullShape(g_coins[i], &coin_shape, coin_hull);
 	}
-	b3DestroyHull(coin_hull);
+	if (allocated_hull != NULL) b3DestroyHull(allocated_hull);
 	return 1;
 }
 
@@ -162,7 +177,7 @@ EMSCRIPTEN_KEEPALIVE void step_world(float dt)
 		b3WorldTransform target = {{0.0f, 0.35f, -4.7f + 1.4f * sinf(g_time * 0.8f)}, b3Quat_identity};
 		b3Body_SetTargetTransform(g_pusher, target, dt, true);
 	}
-	b3World_Step(g_world, dt, 4);
+	b3World_Step(g_world, dt, g_solver_substeps);
 	if (g_recycle)
 	{
 		for (int i = 0; i < g_coin_count; ++i)
@@ -209,3 +224,7 @@ EMSCRIPTEN_KEEPALIVE uintptr_t get_stats_buffer(void)
 }
 
 EMSCRIPTEN_KEEPALIVE void set_paused(int paused) { g_paused = paused != 0; }
+
+
+
+
