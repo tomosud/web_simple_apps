@@ -1,0 +1,4 @@
+build-wasm/
+.emscripten/
+*.log
+.DS_Store
