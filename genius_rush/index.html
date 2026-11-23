@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#05030f">
+<title>天才ラッシュ∞</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="bg"></canvas>
+  <div id="vig"></div>
+
+  <!-- メイン画面 -->
+  <div id="stage">
+    <header id="hud">
+      <div class="hud-top">
+        <div id="lives" aria-label="残りライフ"></div>
+        <div id="rank">凡人</div>
+        <button id="mute" type="button" aria-label="サウンド切替">♪</button>
+      </div>
+      <div class="iq-label">YOUR IQ</div>
+      <div id="iq"><span id="iqNum">100</span><span id="iqUnit"></span></div>
+      <div class="sub-row">
+        <span class="chip">倍率 <b id="mult">×1</b></span>
+        <span class="chip" id="comboChip">COMBO <b id="combo">0</b></span>
+        <span class="chip fever-chip" id="feverChip">FEVER <b id="feverLeft">0</b></span>
+      </div>
+    </header>
+
+    <section id="qArea">
+      <div id="praise"><div class="main"></div><div class="sub"></div></div>
+      <div id="qTag"></div>
+      <div id="qText"></div>
+      <div id="timer"><i id="timerBar"></i></div>
+    </section>
+
+    <div id="gauge">
+      <span class="g-label">BONUS</span>
+      <div class="g-cells"><i></i><i></i><i></i><i></i><i></i></div>
+    </div>
+
+    <section id="choices">
+      <button class="choice ca" id="cA" type="button"><span class="inner"></span></button>
+      <button class="choice cb" id="cB" type="button"><span class="inner"></span></button>
+    </section>
+  </div>
+
+  <!-- ボーナス：スロット -->
+  <div id="slot" class="bonus">
+    <div class="bonus-head">
+      <div class="bonus-title">神託スロット</div>
+      <div class="hope">期待度 <span id="hope">★☆☆☆☆</span></div>
+    </div>
+    <div class="slot-frame" id="slotFrame">
+      <div class="reel"><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div></div>
+      <div class="reel"><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div></div>
+      <div class="reel"><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div></div>
+      <div class="payline"></div>
+    </div>
+    <div class="bonus-result" id="slotResult"><div class="r1"></div><div class="r2"></div><div class="r3"></div></div>
+    <button id="slotBtn" class="bigbtn stop" type="button">STOP</button>
+  </div>
+
+  <!-- ボーナス：三択カード -->
+  <div id="cards" class="bonus">
+    <div class="bonus-head">
+      <div class="bonus-title">天啓の三択</div>
+      <div class="hope" id="cardsMsg">直感で1枚えらべ</div>
+    </div>
+    <div class="bonus-result" id="cardsResult"><div class="r1"></div><div class="r2"></div><div class="r3"></div></div>
+    <div class="card-row">
+      <button class="card" type="button"><span class="f back">?</span><span class="f front"></span></button>
+      <button class="card" type="button"><span class="f back">?</span><span class="f front"></span></button>
+      <button class="card" type="button"><span class="f back">?</span><span class="f front"></span></button>
+    </div>
+  </div>
+
+  <!-- ラストチャンス -->
+  <div id="revive" class="bonus">
+    <div class="bonus-head">
+      <div class="bonus-title danger">LAST CHANCE</div>
+      <div class="hope">運命を止めろ</div>
+    </div>
+    <div id="reviveWord">復活</div>
+    <button id="reviveBtn" class="bigbtn stop" type="button">STOP</button>
+  </div>
+
+  <div id="pop"></div>
+  <div id="cutin"><div class="band"><div class="c1"></div><div class="c2"></div></div></div>
+
+  <!-- リザルト -->
+  <div id="result" class="full">
+    <div class="res-head">FINAL IQ</div>
+    <div id="resNew">NEW RECORD!!</div>
+    <div id="resIq"><span id="resNum">0</span><span id="resUnit"></span></div>
+    <div id="resRank"></div>
+    <ul id="resStats"></ul>
+    <div class="foot">
+      <button id="shareBtn" class="ghost" type="button">結果をシェア</button>
+      <button id="retryBtn" class="bigbtn" type="button">もう一回</button>
+    </div>
+  </div>
+
+  <!-- タイトル -->
+  <div id="title" class="full on">
+    <div class="logo">
+      <div class="l1">天才</div>
+      <div class="l2">ラッシュ<span>∞</span></div>
+      <div class="l3">GENIUS RUSH INFINITY</div>
+    </div>
+    <p class="copy">あなたのIQ、<br>インフレさせます。</p>
+    <div id="bestBox">BEST IQ <b id="bestIq">---</b></div>
+    <div class="foot">
+      <label class="lowfx"><input type="checkbox" id="lowFx"> 演出ひかえめ（点滅・揺れを減らす）</label>
+      <button id="startBtn" class="bigbtn" type="button">TAP TO START</button>
+      <p class="note">※表示されるIQはフィクションです。課金・賭けは一切ありません。<br>※強い光の点滅を含みます。</p>
+    </div>
+  </div>
+
+  <canvas id="fx"></canvas>
+  <div id="flash"></div>
+</div>
+
+<script src="js/num.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/questions.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

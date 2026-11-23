@@ -12,6 +12,12 @@
       "runtimeExecutable": "cmd",
       "runtimeArgs": ["/c", "npx http-server dog -p 8123 -c-1"],
       "port": 8123
+    },
+    {
+      "name": "genius_rush",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "npx http-server genius_rush -p 8131 -c-1"],
+      "port": 8131
     }
   ]
 }

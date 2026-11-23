@@ -17,6 +17,15 @@ https://tomosud.github.io/web_simple_apps/card_game.html
   
 https://github.com/user-attachments/assets/b9c0ff08-c6f7-43f6-9789-6f00b819b6f2
 
+### 天才ラッシュ∞
+
+https://tomosud.github.io/web_simple_apps/genius_rush/
+
+誰でも解ける二択を即答するだけで、IQが無量大数までインフレするゲーム
+- スマホ片手でタップするだけ
+- スロット・確変（覚醒FEVER）つき
+- 表示されるIQはフィクションです
+
 ### テトリス（テトリスじゃない）
 
 
